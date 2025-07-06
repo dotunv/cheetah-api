@@ -37,11 +37,11 @@ This document outlines the key tasks for building the FastAPI backend for the Ch
 - [x] Secure basic routes using FastAPI's `Depends` for authentication
 
 ### Database Setup & Migrations (Alembic)
-- [ ] Initialize Alembic within the project
-- [ ] Configure `alembic.ini` to point to your `SQLModel.metadata`
-- [ ] Generate initial migration for User and Booking models
-- [ ] Apply initial migration to the database
-- [ ] Document Alembic migration workflow
+- [x] Initialize Alembic within the project
+- [x] Configure `alembic.ini` to point to your `SQLModel.metadata`
+- [x] Generate initial migration for User and Booking models
+- [x] Apply initial migration to the database
+- [x] Document Alembic migration workflow
 
 ## Phase 1: MVP Core Features
 

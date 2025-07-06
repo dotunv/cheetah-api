@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
     
     # Database settings
-    DATABASE_URL: str 
+    DATABASE_URL: str = "postgresql://postgres:password@localhost:5432/cheetah_db" 
     
     # JWT settings
     SECRET_KEY: str = "your-secret-key-change-in-production"
