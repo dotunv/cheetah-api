@@ -16,6 +16,7 @@ engine = create_async_engine(
     echo=settings.DEBUG,
     pool_pre_ping=True,
     pool_recycle=300,
+    connect_args={"ssl": True}
 )
 
 # Create async session factory
@@ -47,7 +48,8 @@ async def lifespan(app):
     # Test database connection
     try:
         async with engine.begin() as conn:
-            await conn.run_sync(lambda sync_conn: sync_conn.execute("SELECT 1"))
+            from sqlalchemy import text
+            await conn.execute(text("SELECT 1"))
         print("Database connection established successfully")
     except Exception as e:
         print(f"Database connection failed: {e}")

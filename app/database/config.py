@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
     
     # Database settings
-    DATABASE_URL: str = "postgresql://user:password@localhost/cheetah_db"
+    DATABASE_URL: str 
     
     # JWT settings
     SECRET_KEY: str = "your-secret-key-change-in-production"
@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     # Application settings
     APP_NAME: str = "Cheetah API"
     APP_VERSION: str = "1.0.0"
-    DEBUG: bool = False
+    DEBUG: bool = True
     
     # External API settings
     INSURANCE_API_URL: Optional[str] = None

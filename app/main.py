@@ -3,11 +3,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 
-from database.database import lifespan
-from database.config import settings
+from .database.database import lifespan
+from .database.config import settings
 
 # Import routers
-from routers import users, auth, bookings
+from .routers import users, auth, bookings
 
 
 @asynccontextmanager
@@ -65,12 +65,3 @@ app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 app.include_router(users.router, prefix="/users", tags=["Users"])
 app.include_router(bookings.router, prefix="/bookings", tags=["Bookings"])
 
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(
-        app, 
-        host="0.0.0.0", 
-        port=8000,
-        reload=settings.DEBUG
-    )
