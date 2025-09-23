@@ -1,4 +1,5 @@
 import os
+from functools import lru_cache
 from typing import Optional
 from pydantic_settings import BaseSettings
 
@@ -7,10 +8,10 @@ class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
     
     # Database settings
-    DATABASE_URL: str = "postgresql://postgres:password@localhost:5432/cheetah_db" 
+    DATABASE_URL: str 
     
     # JWT settings
-    SECRET_KEY: str = "your-secret-key-change-in-production"
+    SECRET_KEY: str
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     
@@ -40,5 +41,7 @@ class Settings(BaseSettings):
         case_sensitive = True
 
 
-# Create global settings instance
-settings = Settings()
+# Create settings instance (cached)
+@lru_cache(maxsize=1)
+def get_settings() -> Settings:
+    return Settings()

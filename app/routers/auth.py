@@ -6,7 +6,7 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database.database import get_db
-from ..database.config import settings
+from ..database.config import get_settings
 from ..services.auth_service import AuthService
 from ..services.user_service import UserService
 
@@ -147,7 +147,7 @@ async def login(
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token_expires = timedelta(minutes=get_settings().ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = AuthService.create_access_token(
         data={"sub": str(user.id)},
         expires_delta=access_token_expires
@@ -156,7 +156,7 @@ async def login(
     return Token(
         access_token=access_token,
         token_type="bearer",
-        expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        expires_in=get_settings().ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         user_id=str(user.id),
         user_email=user.email,
         user_role=user.role.value
@@ -182,7 +182,7 @@ async def login_with_json(
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token_expires = timedelta(minutes=get_settings().ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = AuthService.create_access_token(
         data={"sub": str(user.id)},
         expires_delta=access_token_expires
@@ -191,7 +191,7 @@ async def login_with_json(
     return Token(
         access_token=access_token,
         token_type="bearer",
-        expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        expires_in=get_settings().ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         user_id=str(user.id),
         user_email=user.email,
         user_role=user.role.value
@@ -232,11 +232,15 @@ async def request_password_reset(
     reset_token = AuthService.generate_password_reset_token(reset_request.email)
     
     # In production, send email with reset link
-    # For now, just return the token (remove this in production)
-    return {
-        "message": "Password reset token generated",
-        "token": reset_token  # Remove this in production
-    }
+    settings = get_settings()
+    if settings.DEBUG:
+        # For development only, return the token (do NOT expose in production)
+        return {
+            "message": "Password reset token generated (development mode)",
+            "token": reset_token
+        }
+    else:
+        return {"message": "If the email exists, a password reset link has been sent"}
 
 
 @router.post("/password-reset")

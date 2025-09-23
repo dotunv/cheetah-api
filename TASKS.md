@@ -186,16 +186,57 @@ This document outlines the key tasks for building the FastAPI backend for the Ch
 - [ ] Endpoints for applying promo codes during booking
 - [ ] Logic for accumulating and redeeming loyalty points
 
-### Scalability & Observability
-- [ ] Implement comprehensive logging (e.g., `structlog`)
-- [ ] Set up monitoring and alerting (e.g., Prometheus, Grafana, AWS CloudWatch)
-- [ ] Distributed Tracing (e.g., OpenTelemetry) for complex microservice interactions
-- [ ] Optimize database queries and indexing
+## Phase 4: Production Readiness & Quality Improvements
 
-### Deployment Automation (CI/CD)
-- [ ] Set up Dockerfiles for your FastAPI application
-- [ ] Implement CI/CD pipeline (GitHub Actions, GitLab CI, Jenkins, etc.) for automated testing and deployment to AWS/GCP
-- [ ] Container orchestration with Kubernetes (EKS/GKE) for high availability and scalability
+### Security Enhancements
+- [ ] **Environment Variables**: Move hardcoded secrets to environment variables (DATABASE_URL, SECRET_KEY)
+- [x] **Password Reset Security**: Fix password reset token exposure in development mode
+- [ ] **CORS Configuration**: Configure proper CORS settings for production (currently allows all origins)
+- [ ] **Input Validation**: Implement comprehensive input validation and sanitization for all endpoints
+- [ ] **Rate Limiting**: Implement API rate limiting to prevent abuse
+- [ ] **Security Headers**: Add security headers (helmet, CORS, etc.)
+
+### Error Handling & Logging
+- [x] **Basic Logging**: Add structured logging to critical operations
+- [ ] **Comprehensive Error Handling**: Implement centralized error handling with custom exception classes
+- [ ] **Request/Response Logging**: Add detailed request/response logging for debugging
+- [ ] **Monitoring Integration**: Set up monitoring and alerting (Prometheus, Grafana)
+- [ ] **Distributed Tracing**: Implement OpenTelemetry for complex operations
+
+### Testing Strategy
+- [ ] **Unit Tests**: Add unit tests for all services using pytest
+- [ ] **Integration Tests**: Add integration tests for API endpoints
+- [ ] **Test Database**: Set up test database and fixtures
+- [ ] **CI/CD Pipeline**: Implement automated testing pipeline
+- [ ] **Coverage Reporting**: Add test coverage reporting
+
+### API Design & Best Practices
+- [ ] **API Versioning**: Implement API versioning strategy (e.g., /v1/auth/login)
+- [ ] **Pagination**: Add pagination for list endpoints
+- [ ] **Filtering & Sorting**: Implement advanced filtering and sorting options
+- [ ] **Background Tasks**: Use background tasks for heavy operations (email sending, external API calls)
+- [ ] **API Documentation**: Enhance API documentation with examples and schemas
+
+### Performance & Scalability
+- [ ] **Database Optimization**: Add proper indexes on frequently queried fields
+- [ ] **Query Optimization**: Optimize database queries with proper eager loading
+- [ ] **Caching Strategy**: Implement caching for frequently accessed data
+- [ ] **Connection Pooling**: Configure database connection pooling
+- [ ] **Load Testing**: Perform load testing and optimization
+
+### Code Quality
+- [x] **Documentation Updates**: Update README.md and API documentation to reflect current state
+- [ ] **Type Hints**: Add comprehensive type hints throughout codebase
+- [ ] **Code Formatting**: Set up pre-commit hooks for code formatting
+- [ ] **Linting**: Configure comprehensive linting rules
+- [ ] **Code Reviews**: Establish code review processes
+
+### Deployment & DevOps
+- [ ] **Docker Setup**: Create Dockerfiles for containerization
+- [ ] **Health Checks**: Implement comprehensive health check endpoints
+- [ ] **Environment Management**: Set up multiple environments (dev, staging, prod)
+- [ ] **Backup Strategy**: Implement database backup and recovery procedures
+- [ ] **Security Scanning**: Add security scanning to CI/CD pipeline
 
 ## Ongoing Tasks
 

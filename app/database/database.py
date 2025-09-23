@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
-from .config import settings
+from .config import get_settings
 
 
 class Base(DeclarativeBase):
@@ -12,8 +12,8 @@ class Base(DeclarativeBase):
 
 # Create async engine
 engine = create_async_engine(
-    settings.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://"),
-    echo=settings.DEBUG,
+    get_settings().DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://"),
+    echo=get_settings().DEBUG,
     pool_pre_ping=True,
     pool_recycle=300,
     connect_args={"ssl": True}
