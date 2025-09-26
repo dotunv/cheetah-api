@@ -68,23 +68,28 @@ class RouteSearchResponse(BaseModel):
     amenities: List[str]
 
 
-@router.get("/search", response_model=List[RouteSearchResponse])
+@router.get("/search")
 async def search_routes(
     origin: str = Query(..., description="Origin city"),
     destination: str = Query(..., description="Destination city"),
     date: datetime = Query(..., description="Travel date"),
     max_price: Optional[float] = Query(None, description="Maximum price filter"),
+    min_price: Optional[float] = Query(None, description="Minimum price filter"),
     departure_after: Optional[datetime] = Query(None, description="Earliest departure time"),
     departure_before: Optional[datetime] = Query(None, description="Latest departure time"),
     providers: Optional[str] = Query(None, description="Comma-separated provider codes"),
     vehicle_types: Optional[str] = Query(None, description="Comma-separated vehicle types"),
+    sort_by: str = Query("departure_time", description="Sort by: price_low_to_high, price_high_to_low, duration_shortest, duration_longest, departure_time, arrival_time, provider"),
+    include_comparison: bool = Query(False, description="Include price comparison summary"),
     session: AsyncSession = Depends(get_db)
 ):
-    """Search for available routes across all providers."""
+    """Search for available routes across all providers with enhanced filtering and comparison."""
     # Parse filters
     filters = {}
     if max_price:
         filters["max_price"] = max_price
+    if min_price:
+        filters["min_price"] = min_price
     if departure_after:
         filters["departure_after"] = departure_after.isoformat()
     if departure_before:
@@ -93,6 +98,7 @@ async def search_routes(
         filters["providers"] = [p.strip() for p in providers.split(",")]
     if vehicle_types:
         filters["vehicle_types"] = [v.strip() for v in vehicle_types.split(",")]
+    filters["sort_by"] = sort_by
     
     # Search routes
     routes = await BookingService.search_routes(
@@ -103,7 +109,18 @@ async def search_routes(
         filters=filters
     )
     
-    return [RouteSearchResponse(**route) for route in routes]
+    # Prepare response
+    response_data = {
+        "routes": [RouteSearchResponse(**route) for route in routes]
+    }
+    
+    # Add comparison summary if requested
+    if include_comparison:
+        from ..services.transport_provider_service import TransportProviderService
+        comparison_summary = TransportProviderService.get_price_comparison_summary(routes)
+        response_data["comparison_summary"] = comparison_summary
+    
+    return response_data
 
 
 @router.get("/schedule/{schedule_id}", response_model=Dict[str, Any])
@@ -256,6 +273,83 @@ async def get_booking_by_reference(
         status_code=status.HTTP_501_NOT_IMPLEMENTED,
         detail="This endpoint is not yet implemented"
     )
+
+
+@router.get("/price-comparison")
+async def get_price_comparison(
+    origin: str = Query(..., description="Origin city"),
+    destination: str = Query(..., description="Destination city"),
+    date: datetime = Query(..., description="Travel date"),
+    session: AsyncSession = Depends(get_db)
+):
+    """Get comprehensive price comparison across all providers."""
+    # Get all routes without filters
+    routes = await BookingService.search_routes(
+        session=session,
+        origin=origin,
+        destination=destination,
+        date=date,
+        filters={}
+    )
+    
+    # Generate comparison data
+    from ..services.transport_provider_service import TransportProviderService
+    comparison_summary = TransportProviderService.get_price_comparison_summary(routes)
+    
+    # Group by provider for detailed comparison
+    provider_comparison = {}
+    for route in routes:
+        provider_code = route["provider_code"]
+        if provider_code not in provider_comparison:
+            provider_comparison[provider_code] = {
+                "provider_name": route["provider_name"],
+                "routes": [],
+                "price_range": {"min": float('inf'), "max": 0},
+                "duration_range": {"min": float('inf'), "max": 0},
+                "total_options": 0
+            }
+        
+        provider_comparison[provider_code]["routes"].append(route)
+        provider_comparison[provider_code]["total_options"] += 1
+        
+        # Update price range
+        price = route["base_price"]
+        provider_comparison[provider_code]["price_range"]["min"] = min(
+            provider_comparison[provider_code]["price_range"]["min"], price
+        )
+        provider_comparison[provider_code]["price_range"]["max"] = max(
+            provider_comparison[provider_code]["price_range"]["max"], price
+        )
+        
+        # Update duration range
+        duration = route["duration_minutes"]
+        provider_comparison[provider_code]["duration_range"]["min"] = min(
+            provider_comparison[provider_code]["duration_range"]["min"], duration
+        )
+        provider_comparison[provider_code]["duration_range"]["max"] = max(
+            provider_comparison[provider_code]["duration_range"]["max"], duration
+        )
+    
+    # Calculate averages
+    for provider_code in provider_comparison:
+        provider_data = provider_comparison[provider_code]
+        prices = [r["base_price"] for r in provider_data["routes"]]
+        durations = [r["duration_minutes"] for r in provider_data["routes"]]
+        
+        provider_data["price_range"]["average"] = sum(prices) / len(prices)
+        provider_data["duration_range"]["average"] = sum(durations) / len(durations)
+    
+    return {
+        "comparison_summary": comparison_summary,
+        "provider_comparison": provider_comparison,
+        "cheapest_option": min(routes, key=lambda x: x["base_price"]) if routes else None,
+        "fastest_option": min(routes, key=lambda x: x["duration_minutes"]) if routes else None,
+        "search_criteria": {
+            "origin": origin,
+            "destination": destination,
+            "date": date.isoformat()
+        }
+    }
 
 
 @router.get("/providers/statistics", response_model=Dict[str, Any])

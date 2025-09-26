@@ -8,7 +8,7 @@ from .database.database import lifespan
 from .database.config import get_settings
 
 # Import routers
-from .routers import users, auth, bookings
+from .routers import users, auth, bookings, payments
 
 
 @asynccontextmanager
@@ -72,4 +72,5 @@ async def health_check():
 app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 app.include_router(users.router, prefix="/users", tags=["Users"])
 app.include_router(bookings.router, prefix="/bookings", tags=["Bookings"])
+app.include_router(payments.router, prefix="/payments", tags=["Payments"])
 

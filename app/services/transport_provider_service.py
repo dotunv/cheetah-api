@@ -99,8 +99,10 @@ class TransportProviderService:
         if filters:
             all_schedules = TransportProviderService.apply_filters(all_schedules, filters)
         
-        # Sort by departure time
-        all_schedules.sort(key=lambda x: x["departure_time"])
+        # Apply sorting based on filters or default to departure time
+        sort_by = filters.get("sort_by", "departure_time") if filters else "departure_time"
+        all_schedules = TransportProviderService.apply_sorting(all_schedules, sort_by)
+        
         return all_schedules
 
     @staticmethod
@@ -333,17 +335,99 @@ class TransportProviderService:
         if "max_price" in filters:
             filtered = [s for s in filtered if s["base_price"] <= filters["max_price"]]
             
+        if "min_price" in filters:
+            filtered = [s for s in filtered if s["base_price"] >= filters["min_price"]]
+            
         if "min_seats" in filters:
             filtered = [s for s in filtered if s["available_seats"] >= filters["min_seats"]]
             
         if "vehicle_type" in filters:
             filtered = [s for s in filtered if filters["vehicle_type"] in s["vehicle_type"]]
             
+        if "vehicle_types" in filters:
+            vehicle_types = set(filters["vehicle_types"])
+            filtered = [s for s in filtered if any(vt in s["vehicle_type"] for vt in vehicle_types)]
+            
         if "amenities" in filters:
             amenities = set(filters["amenities"])
             filtered = [s for s in filtered if amenities.issubset(set(s["amenities"]))]
             
+        if "providers" in filters:
+            provider_codes = set(filters["providers"])
+            filtered = [s for s in filtered if s["provider_code"] in provider_codes]
+            
+        if "departure_after" in filters:
+            departure_after = datetime.fromisoformat(filters["departure_after"])
+            filtered = [s for s in filtered if datetime.fromisoformat(s["departure_time"]) >= departure_after]
+            
+        if "departure_before" in filters:
+            departure_before = datetime.fromisoformat(filters["departure_before"])
+            filtered = [s for s in filtered if datetime.fromisoformat(s["departure_time"]) <= departure_before]
+            
         return filtered
+
+    @staticmethod
+    def apply_sorting(
+        schedules: List[Dict[str, Any]],
+        sort_by: str
+    ) -> List[Dict[str, Any]]:
+        """Apply sorting to schedules."""
+        if sort_by == "price_low_to_high":
+            return sorted(schedules, key=lambda x: x["base_price"])
+        elif sort_by == "price_high_to_low":
+            return sorted(schedules, key=lambda x: x["base_price"], reverse=True)
+        elif sort_by == "duration_shortest":
+            return sorted(schedules, key=lambda x: x["duration_minutes"])
+        elif sort_by == "duration_longest":
+            return sorted(schedules, key=lambda x: x["duration_minutes"], reverse=True)
+        elif sort_by == "departure_time":
+            return sorted(schedules, key=lambda x: x["departure_time"])
+        elif sort_by == "arrival_time":
+            return sorted(schedules, key=lambda x: x["arrival_time"])
+        elif sort_by == "provider":
+            return sorted(schedules, key=lambda x: x["provider_name"])
+        else:
+            # Default to departure time
+            return sorted(schedules, key=lambda x: x["departure_time"])
+
+    @staticmethod
+    def get_price_comparison_summary(
+        schedules: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """Get price comparison summary for search results."""
+        if not schedules:
+            return {
+                "total_options": 0,
+                "price_range": {"min": 0, "max": 0, "average": 0},
+                "provider_count": 0,
+                "departure_times": {"earliest": None, "latest": None},
+                "duration_range": {"min": 0, "max": 0, "average": 0}
+            }
+        
+        prices = [s["base_price"] for s in schedules]
+        durations = [s["duration_minutes"] for s in schedules]
+        providers = set(s["provider_code"] for s in schedules)
+        departure_times = [datetime.fromisoformat(s["departure_time"]) for s in schedules]
+        
+        return {
+            "total_options": len(schedules),
+            "price_range": {
+                "min": min(prices),
+                "max": max(prices),
+                "average": sum(prices) / len(prices)
+            },
+            "provider_count": len(providers),
+            "departure_times": {
+                "earliest": min(departure_times).isoformat(),
+                "latest": max(departure_times).isoformat()
+            },
+            "duration_range": {
+                "min": min(durations),
+                "max": max(durations),
+                "average": sum(durations) / len(durations)
+            },
+            "providers": list(providers)
+        }
 
     @staticmethod
     async def initialize_mock_providers(session: AsyncSession) -> List[TransportProvider]:
