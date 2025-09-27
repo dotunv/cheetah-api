@@ -40,6 +40,26 @@ class Settings(BaseSettings):
         env_file = ".env.local"
         case_sensitive = True
 
+    def model_post_init(self, __context) -> None:  # type: ignore[override]
+        """Normalize certain fields loaded from env.
+
+        This is defensive to handle cases where values in --env-file are wrapped
+        in quotes (which Docker does not strip). Those quotes break URL parsing.
+        """
+        def _strip_quotes(value: Optional[str]) -> Optional[str]:
+            if value is None:
+                return value
+            v = value.strip()
+            if (v.startswith("\"") and v.endswith("\"")) or (v.startswith("'") and v.endswith("'")):
+                return v[1:-1]
+            return v
+
+        # Normalize strings that are sensitive to surrounding quotes
+        self.DATABASE_URL = _strip_quotes(self.DATABASE_URL) or self.DATABASE_URL
+        self.SECRET_KEY = _strip_quotes(self.SECRET_KEY) or self.SECRET_KEY
+        self.INSURANCE_API_URL = _strip_quotes(self.INSURANCE_API_URL)
+        self.WIFI_API_URL = _strip_quotes(self.WIFI_API_URL)
+
 
 # Create settings instance (cached)
 @lru_cache(maxsize=1)
