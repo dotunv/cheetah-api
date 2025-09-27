@@ -24,7 +24,7 @@ WORKDIR /app
 COPY pyproject.toml README.md ./
 
 # Install project dependencies using uv
-RUN uv pip install -e .
+RUN uv pip install --system -e .
 
 # Runtime stage
 FROM python:3.13-slim
