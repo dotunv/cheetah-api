@@ -1,7 +1,10 @@
 import asyncio
 from datetime import datetime
 from typing import Optional, Dict, Any
-from ..database.config import settings
+from ..database.config import get_settings
+
+# Initialize settings instance
+settings = get_settings()
 
 
 class NotificationService:
