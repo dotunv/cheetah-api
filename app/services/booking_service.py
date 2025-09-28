@@ -220,6 +220,21 @@ class BookingService:
             "insurance_policy": insurance_policy,
             "wifi_code": wifi_code
         }
+
+    @staticmethod
+    async def get_booking_by_reference(
+        session: AsyncSession,
+        booking_reference: str
+    ) -> Optional[Dict[str, Any]]:
+        """Get booking details by booking reference."""
+        result = await session.execute(
+            select(Booking).where(Booking.booking_reference == booking_reference)
+        )
+        booking = result.scalar_one_or_none()
+        if not booking:
+            return None
+        # Reuse get_booking_details to ensure consistent shape
+        return await BookingService.get_booking_details(session, str(booking.id))
     
     @staticmethod
     async def get_user_bookings(
@@ -247,6 +262,29 @@ class BookingService:
                 booking_list.append(booking_data)
         
         return booking_list
+
+    @staticmethod
+    async def get_all_bookings(
+        session: AsyncSession,
+        limit: int = 50,
+        offset: int = 0,
+        status: Optional[BookingStatus] = None
+    ) -> List[Dict[str, Any]]:
+        """Get all bookings with optional status filter."""
+        query = select(Booking)
+        if status:
+            query = query.where(Booking.booking_status == status)
+        query = query.order_by(Booking.created_at.desc()).limit(limit).offset(offset)
+
+        result = await session.execute(query)
+        bookings = result.scalars().all()
+
+        booking_list: List[Dict[str, Any]] = []
+        for booking in bookings:
+            details = await BookingService.get_booking_details(session, str(booking.id))
+            if details:
+                booking_list.append(details)
+        return booking_list
     
     @staticmethod
     async def cancel_booking(
@@ -270,6 +308,9 @@ class BookingService:
         # Check if booking can be cancelled
         if booking.booking_status in [BookingStatus.CANCELLED, BookingStatus.COMPLETED]:
             return False
+        # Disallow cancelling a paid booking without a refund flow
+        if booking.payment_status == PaymentStatus.PAID:
+            return False
         
         # Update booking status
         booking.booking_status = BookingStatus.CANCELLED
@@ -285,6 +326,31 @@ class BookingService:
             booking.wifi_code.usage_status = WifiUsageStatus.EXPIRED
             booking.wifi_code.updated_at = datetime.utcnow()
         
+        await session.commit()
+        return True
+
+    @staticmethod
+    async def confirm_booking(
+        session: AsyncSession,
+        booking_id: str
+    ) -> bool:
+        """Confirm a booking (admin action)."""
+        result = await session.execute(
+            select(Booking).where(Booking.id == uuid.UUID(booking_id))
+        )
+        booking = result.scalar_one_or_none()
+        if not booking:
+            return False
+
+        # If already cancelled or completed, cannot confirm
+        if booking.booking_status in [BookingStatus.CANCELLED, BookingStatus.COMPLETED]:
+            return False
+        # Require payment to be completed before confirming
+        if booking.payment_status != PaymentStatus.PAID:
+            return False
+
+        booking.booking_status = BookingStatus.CONFIRMED
+        booking.updated_at = datetime.utcnow()
         await session.commit()
         return True
     

@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database.database import get_db
 from ..services.payment_service import PaymentService
+from ..services.booking_service import BookingService
 from .auth import get_current_user
 
 router = APIRouter()
@@ -84,21 +85,25 @@ async def initialize_payment(
 ):
     """Initialize payment for a booking."""
     try:
-        # Get user email from current user or from booking
+        # Determine user email: prefer authenticated user; fallback to guest email from booking
         user_email = current_user["email"] if current_user else None
-        
         if not user_email:
-            # Try to get email from booking
-            # This would need to be implemented in the service
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="User email is required for payment"
-            )
-        
+            booking_details = await BookingService.get_booking_details(session, payment_request.booking_id)
+            if not booking_details or not booking_details.get("guest_email"):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="User email is required for payment"
+                )
+            user_email = booking_details["guest_email"]
+
+        # Calculate accurate amount for the booking
+        totals = await PaymentService.calculate_booking_total(session, payment_request.booking_id)
+        amount = totals.get("grand_total")
+
         payment_data = await PaymentService.initialize_payment(
             session=session,
             booking_id=payment_request.booking_id,
-            amount=8000,  # This should come from booking calculation
+            amount=amount,
             user_email=user_email,
             payment_method=payment_request.payment_method,
             provider=payment_request.provider

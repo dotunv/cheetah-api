@@ -6,7 +6,7 @@ from sqlalchemy import select, and_
 import httpx
 import json
 
-from ..database.models import Booking, PaymentStatus, User
+from ..database.models import Booking, PaymentStatus, User, BookingStatus
 from ..database.config import get_settings
 
 
@@ -91,7 +91,7 @@ class PaymentService:
             
             if booking:
                 booking.payment_status = PaymentStatus.PAID
-                booking.booking_status = "confirmed"  # Update this based on your enum
+                booking.booking_status = BookingStatus.CONFIRMED
                 await session.commit()
         
         return verification_data
@@ -167,14 +167,17 @@ class PaymentService:
         if not booking:
             raise ValueError("Booking not found")
         
+        # The booking.total_amount is already the computed total during booking creation.
+        # To avoid double-counting, we treat booking.total_amount as the grand total here
+        # and set fee components to zero. If fee breakdown is needed, compute it at booking time
+        # and persist it separately.
         base_amount = booking.total_amount
-        booking_fee = 200  # Fixed booking fee
-        platform_fee = base_amount * 0.05  # 5% platform fee
-        insurance_fee = 0  # Free insurance
-        wifi_fee = 0  # Free WiFi
-        
-        total_fees = booking_fee + platform_fee + insurance_fee + wifi_fee
-        grand_total = base_amount + total_fees
+        booking_fee = 0
+        platform_fee = 0
+        insurance_fee = 0
+        wifi_fee = 0
+        total_fees = 0
+        grand_total = booking.total_amount
         
         return {
             "base_amount": base_amount,
