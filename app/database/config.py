@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     
     # Database settings
     DATABASE_URL: str 
+    SQL_ECHO: bool = False
     
     # JWT settings
     SECRET_KEY: str
@@ -19,6 +20,13 @@ class Settings(BaseSettings):
     APP_NAME: str = "Cheetah API"
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = True
+    
+    # CORS settings
+    # Comma-separated list of origins, e.g. "http://localhost:3000,http://127.0.0.1:5173"
+    CORS_ALLOW_ORIGINS: str = "*"
+    CORS_ALLOW_CREDENTIALS: bool = False
+    CORS_ALLOW_METHODS: str = "*"
+    CORS_ALLOW_HEADERS: str = "*"
     
     # External API settings
     INSURANCE_API_URL: Optional[str] = None

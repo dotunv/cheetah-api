@@ -19,6 +19,10 @@ async def app_lifespan(app: FastAPI):
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
     logger = logging.getLogger(__name__)
+    # Reduce noisy SQL logs unless explicitly enabled
+    settings = get_settings()
+    sqlalchemy_logger = logging.getLogger("sqlalchemy.engine")
+    sqlalchemy_logger.setLevel(logging.INFO if settings.SQL_ECHO else logging.WARNING)
     logger.info("Starting Cheetah API application")
     async with lifespan(app):
         yield
@@ -34,10 +38,26 @@ app = FastAPI(
     redoc_url="/redoc" if get_settings().DEBUG else None,
 )
 
-# Add CORS middleware
+# Add CORS middleware (configurable)
+origins = [
+    "http://localhost:3000",
+]
+_settings = get_settings()
+_origins = [o.strip() for o in _settings.CORS_ALLOW_ORIGINS.split(",") if o.strip()] or ["*"]
+_allow_credentials = _settings.CORS_ALLOW_CREDENTIALS
+# If wildcard origins are used, credentials cannot be allowed per CORS spec
+if _origins == ["*"] and _allow_credentials:
+    logging.getLogger(__name__).warning(
+        "CORS misconfiguration: allow_credentials=True with '*' origins is invalid. "
+        "Forcing allow_credentials=False. Set explicit origins in CORS_ALLOW_ORIGINS to enable credentials."
+    )
+    _allow_credentials = False
+_methods = [m.strip() for m in _settings.CORS_ALLOW_METHODS.split(",")] if _settings.CORS_ALLOW_METHODS != "*" else ["*"]
+_headers = [h.strip() for h in _settings.CORS_ALLOW_HEADERS.split(",")] if _settings.CORS_ALLOW_HEADERS != "*" else ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # TODO: tighten for production
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

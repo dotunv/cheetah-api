@@ -27,7 +27,7 @@ def _sanitize_database_url(db_url: str) -> str:
 # Create async engine
 engine = create_async_engine(
     _sanitize_database_url(get_settings().DATABASE_URL),
-    echo=get_settings().DEBUG,
+    echo=get_settings().SQL_ECHO,
     pool_pre_ping=True,
     pool_recycle=300,
     connect_args={"ssl": True},
