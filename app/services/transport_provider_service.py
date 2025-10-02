@@ -10,59 +10,14 @@ import random
 
 from ..database.models import TransportProvider, Route, Schedule, TransportType
 from ..database.config import get_settings
+from .mock_transport_data import MockTransportData
 
 
 class TransportProviderService:
     """Service for managing transport provider integrations and data."""
     
-    # Mock data for transport providers
-    MOCK_PROVIDERS = {
-        "abc_transport": {
-            "name": "ABC Transport",
-            "code": "abc",
-            "website": "https://www.abctransport.com/",
-            "routes": [
-                {"origin": "Lagos", "destination": "Abuja", "duration_hours": 12},
-                {"origin": "Lagos", "destination": "Port Harcourt", "duration_hours": 8},
-                {"origin": "Lagos", "destination": "Calabar", "duration_hours": 10},
-                {"origin": "Abuja", "destination": "Lagos", "duration_hours": 12},
-                {"origin": "Port Harcourt", "destination": "Lagos", "duration_hours": 8},
-                {"origin": "Calabar", "destination": "Lagos", "duration_hours": 10},
-                {"origin": "Lagos", "destination": "Owerri", "duration_hours": 7},
-                {"origin": "Owerri", "destination": "Lagos", "duration_hours": 7},
-            ]
-        },
-        "guo_transport": {
-            "name": "G.U.O Transport",
-            "code": "guo",
-            "website": "https://guotransport.com/",
-            "routes": [
-                {"origin": "Lagos", "destination": "Enugu", "duration_hours": 9},
-                {"origin": "Lagos", "destination": "Kano", "duration_hours": 15},
-                {"origin": "Lagos", "destination": "Kaduna", "duration_hours": 13},
-                {"origin": "Enugu", "destination": "Lagos", "duration_hours": 9},
-                {"origin": "Kano", "destination": "Lagos", "duration_hours": 15},
-                {"origin": "Kaduna", "destination": "Lagos", "duration_hours": 13},
-                {"origin": "Lagos", "destination": "Jos", "duration_hours": 11},
-                {"origin": "Jos", "destination": "Lagos", "duration_hours": 11},
-            ]
-        },
-        "pmt": {
-            "name": "PMT",
-            "code": "pmt",
-            "website": "https://pmt.ng/",
-            "routes": [
-                {"origin": "Lagos", "destination": "Ibadan", "duration_hours": 3},
-                {"origin": "Lagos", "destination": "Ilorin", "duration_hours": 6},
-                {"origin": "Lagos", "destination": "Akure", "duration_hours": 5},
-                {"origin": "Ibadan", "destination": "Lagos", "duration_hours": 3},
-                {"origin": "Ilorin", "destination": "Lagos", "duration_hours": 6},
-                {"origin": "Akure", "destination": "Lagos", "duration_hours": 5},
-                {"origin": "Lagos", "destination": "Ado Ekiti", "duration_hours": 4},
-                {"origin": "Ado Ekiti", "destination": "Lagos", "duration_hours": 4},
-            ]
-        }
-    }
+    # Use comprehensive mock data
+    MOCK_PROVIDERS = MockTransportData.TRANSPORT_PROVIDERS
     
     @staticmethod
     async def search_routes(
@@ -207,6 +162,10 @@ class TransportProviderService:
         if not provider_data:
             return []
 
+        # Check if route is available
+        if not MockTransportData.is_route_available(provider_code, origin, destination):
+            return []
+
         # Find matching route
         matching_route = None
         for route in provider_data["routes"]:
@@ -218,37 +177,62 @@ class TransportProviderService:
         if not matching_route:
             return []
 
-        # Generate mock schedules for the date
+        # Get frequency and generate schedules accordingly
+        frequency = matching_route.get("frequency", "daily")
+        duration_hours = matching_route["duration_hours"]
+        
+        # Generate schedules based on frequency
         schedules = []
-        base_times = ["06:00", "08:00", "10:00", "12:00", "14:00", "16:00", "18:00", "20:00"]
+        base_times = []
+        
+        if frequency == "every_30_minutes":
+            base_times = [f"{h:02d}:{m:02d}" for h in range(6, 22) for m in [0, 30]]
+        elif frequency == "every_hour":
+            base_times = [f"{h:02d}:00" for h in range(6, 22)]
+        elif frequency == "every_2_hours":
+            base_times = [f"{h:02d}:00" for h in range(6, 22, 2)]
+        elif frequency == "every_3_hours":
+            base_times = [f"{h:02d}:00" for h in range(6, 21, 3)]
+        else:  # daily
+            base_times = ["06:00", "08:00", "10:00", "12:00", "14:00", "16:00", "18:00", "20:00"]
+
+        # Filter out some schedules randomly for realism (10% chance)
+        base_times = [time for time in base_times if random.random() > 0.1]
 
         for i, base_time in enumerate(base_times):
-            # Skip some schedules randomly for realism
-            if random.random() < 0.3:
-                continue
-
             departure_time = datetime.combine(date.date(), datetime.strptime(base_time, "%H:%M").time())
-            duration_hours = matching_route["duration_hours"]
             arrival_time = departure_time + timedelta(hours=duration_hours)
 
-            # Generate random pricing based on distance and time
-            base_price = 5000 + (duration_hours * 500) + random.randint(-500, 1000)
-
-            # Generate random seat availability
-            total_seats = random.choice([18, 24, 30, 45])
-            available_seats = random.randint(5, total_seats)
-
-            # Vehicle types
-            vehicle_types = ["Sprinter", "Luxury Bus", "AC Bus", "Shuttle"]
+            # Get realistic pricing
+            distance = MockTransportData.get_distance(origin, destination)
+            
+            # Choose vehicle type based on provider specialties
+            vehicle_types = provider_data.get("specialties", ["AC Bus"])
             vehicle_type = random.choice(vehicle_types)
+            
+            # Calculate base price using realistic pricing
+            base_price = MockTransportData.calculate_base_price(origin, destination, vehicle_type)
+            
+            # Apply time-based pricing
+            base_price = MockTransportData.apply_time_multiplier(base_price, departure_time)
+            
+            # Apply day-of-week pricing
+            base_price = MockTransportData.apply_day_multiplier(base_price, departure_time)
+            
+            # Add some random variation (±10%)
+            price_variation = random.uniform(0.9, 1.1)
+            base_price *= price_variation
 
-            # Amenities
-            if "Luxury" in vehicle_type:
-                amenities = ["AC", "WiFi", "USB Charging", "Reclining Seats", "Entertainment"]
-            elif "AC" in vehicle_type:
-                amenities = ["AC", "USB Charging", "Reclining Seats"]
-            else:
-                amenities = ["USB Charging"]
+            # Get vehicle specifications
+            vehicle_specs = MockTransportData.VEHICLE_TYPES.get(vehicle_type, MockTransportData.VEHICLE_TYPES["AC Bus"])
+            total_seats = vehicle_specs["capacity"]
+            
+            # Generate realistic seat availability (60-95% occupancy)
+            occupancy_rate = random.uniform(0.6, 0.95)
+            available_seats = max(1, int(total_seats * (1 - occupancy_rate)))
+
+            # Get amenities for vehicle type
+            amenities = MockTransportData.get_vehicle_amenities(vehicle_type)
 
             schedule = {
                 "schedule_id": f"{provider_code}_{date.strftime('%Y%m%d')}_{i}",
@@ -260,10 +244,22 @@ class TransportProviderService:
                 "duration_minutes": duration_hours * 60,
                 "total_seats": total_seats,
                 "available_seats": available_seats,
-                "base_price": base_price,
+                "base_price": round(base_price, 2),
                 "vehicle_type": vehicle_type,
                 "amenities": amenities,
-                "provider_name": provider_data["name"]
+                "provider_name": provider_data["name"],
+                "provider_phone": provider_data.get("phone", ""),
+                "provider_email": provider_data.get("email", ""),
+                "provider_website": provider_data.get("website", ""),
+                "safety_rating": provider_data.get("safety_rating", 4.0),
+                "reputation": provider_data.get("reputation", "Good"),
+                "fleet_size": provider_data.get("fleet_size", 50),
+                "distance_km": distance,
+                "terminal_origin": random.choice(MockTransportData.CITIES.get(origin, {}).get("terminals", ["Main Terminal"])),
+                "terminal_destination": random.choice(MockTransportData.CITIES.get(destination, {}).get("terminals", ["Main Terminal"])),
+                "booking_policies": MockTransportData.BOOKING_POLICIES,
+                "terminal_facilities": list(MockTransportData.TERMINAL_FACILITIES.keys())[:5],  # Random 5 facilities
+                "safety_features": list(MockTransportData.SAFETY_STANDARDS.keys())[:5]  # Random 5 safety features
             }
 
             schedules.append(schedule)
@@ -277,22 +273,52 @@ class TransportProviderService:
         seats: int = 1
     ) -> Dict[str, Any]:
         """Mock API call to get pricing for a specific schedule."""
+        # Extract origin and destination from schedule_id if possible
+        # For now, use a default calculation
         base_price = 5000 + random.randint(1000, 3000)
+        
+        # Apply realistic pricing based on provider
+        provider_data = TransportProviderService.MOCK_PROVIDERS.get(provider_code, {})
+        if provider_data:
+            # Higher-end providers charge more
+            reputation_multiplier = {
+                "Excellent": 1.2,
+                "Very Good": 1.1,
+                "Good": 1.0
+            }.get(provider_data.get("reputation", "Good"), 1.0)
+            base_price *= reputation_multiplier
+        
         total_price = base_price * seats
         booking_fee = 200
-        insurance_fee = 0
-        wifi_fee = 0
+        insurance_fee = 0  # Free insurance
+        wifi_fee = 0  # Free WiFi
+        
+        # Add some additional fees based on provider
+        convenience_fee = 100 if provider_data.get("reputation") == "Excellent" else 50
+        service_fee = 150 if provider_data.get("fleet_size", 0) > 200 else 100
+        
+        total_fees = booking_fee + insurance_fee + wifi_fee + convenience_fee + service_fee
 
         return {
             "schedule_id": schedule_id,
             "provider_code": provider_code,
-            "base_price_per_seat": base_price,
+            "base_price_per_seat": round(base_price, 2),
             "seats_requested": seats,
-            "total_price": total_price,
+            "total_price": round(total_price, 2),
             "booking_fee": booking_fee,
             "insurance_fee": insurance_fee,
             "wifi_fee": wifi_fee,
-            "grand_total": total_price + booking_fee
+            "convenience_fee": convenience_fee,
+            "service_fee": service_fee,
+            "total_fees": total_fees,
+            "grand_total": round(total_price + total_fees, 2),
+            "currency": "NGN",
+            "pricing_breakdown": {
+                "base_fare": round(total_price, 2),
+                "fees": total_fees,
+                "discounts": 0,
+                "taxes": 0
+            }
         }
 
     @staticmethod
@@ -440,6 +466,8 @@ class TransportProviderService:
                 name=data["name"],
                 code=data["code"],
                 website_url=data["website"],
+                contact_email=data.get("email"),
+                contact_phone=data.get("phone"),
                 transport_type=TransportType.BUS
             )
             providers.append(provider)

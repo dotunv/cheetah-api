@@ -39,9 +39,6 @@ app = FastAPI(
 )
 
 # Add CORS middleware (configurable)
-origins = [
-    "http://localhost:3000",
-]
 _settings = get_settings()
 _origins = [o.strip() for o in _settings.CORS_ALLOW_ORIGINS.split(",") if o.strip()] or ["*"]
 _allow_credentials = _settings.CORS_ALLOW_CREDENTIALS
@@ -57,10 +54,10 @@ _headers = [h.strip() for h in _settings.CORS_ALLOW_HEADERS.split(",")] if _sett
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=_origins,  # ✅ FIXED: Using dynamic origins from settings
+    allow_credentials=_allow_credentials,  # ✅ FIXED: Using dynamic credentials setting
+    allow_methods=_methods,  # ✅ FIXED: Using dynamic methods setting
+    allow_headers=_headers,  # ✅ FIXED: Using dynamic headers setting
 )
 
 

@@ -50,7 +50,7 @@ class BookingService:
         # In a real implementation, this would query the database
         provider_code = schedule_id.split("_")[0]
         
-        # Mock schedule details
+        # Mock schedule details - in a real implementation, this would come from the database
         schedule_details = {
             "schedule_id": schedule_id,
             "provider_code": provider_code,
@@ -97,13 +97,18 @@ class BookingService:
         booking_fee = 200
         grand_total = total_amount + booking_fee
         
+        # For now, we'll use a mock UUID for the schedule_id since we're using string-based IDs
+        # In a real implementation, you would look up the actual schedule UUID from the database
+        # based on the schedule_code or create a mapping
+        mock_schedule_uuid = uuid.uuid5(uuid.NAMESPACE_DNS, schedule_id)
+        
         # Create booking record
         booking = Booking(
             booking_reference=BookingService.generate_booking_reference(),
             user_id=uuid.UUID(user_id) if user_id else None,
             guest_email=guest_email,
             guest_phone=guest_phone,
-            schedule_id=uuid.UUID(schedule_id) if schedule_id else None,  # This would be the actual schedule ID
+            schedule_id=mock_schedule_uuid,  # Use generated UUID based on schedule_id string
             passenger_count=len(passenger_details),
             total_amount=grand_total,
             booking_status=BookingStatus.PENDING,
