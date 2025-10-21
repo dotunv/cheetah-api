@@ -1,6 +1,6 @@
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 
 
@@ -22,7 +22,7 @@ class AuditService:
     ) -> None:
         try:
             payload = {
-                "ts": datetime.utcnow().isoformat(),
+                "ts": datetime.now(timezone.utc)().isoformat(),
                 "action": action,
                 "entity_type": entity_type,
                 "entity_id": entity_id,

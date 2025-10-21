@@ -1,7 +1,7 @@
 import uuid
 import random
 import string
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Any, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
@@ -184,7 +184,7 @@ class WifiService:
         query = select(WifiCode).where(
             and_(
                 WifiCode.usage_status == WifiUsageStatus.UNUSED,
-                WifiCode.expiry_time > datetime.utcnow()
+                WifiCode.expiry_time > datetime.now(timezone.utc)()
             )
         )
         
@@ -225,12 +225,12 @@ class WifiService:
         if wifi_code.usage_status != WifiUsageStatus.UNUSED:
             return False
         
-        if wifi_code.expiry_time <= datetime.utcnow():
+        if wifi_code.expiry_time <= datetime.now(timezone.utc)():
             return False
         
         # Mark as used
         wifi_code.usage_status = WifiUsageStatus.USED
-        wifi_code.updated_at = datetime.utcnow()
+        wifi_code.updated_at = datetime.now(timezone.utc)()
         
         await session.commit()
         return True
@@ -256,7 +256,7 @@ class WifiService:
                 "message": "WiFi code has already been used"
             }
         
-        if wifi_code.expiry_time <= datetime.utcnow():
+        if wifi_code.expiry_time <= datetime.now(timezone.utc)():
             return {
                 "valid": False,
                 "message": "WiFi code has expired"
@@ -281,7 +281,7 @@ class WifiService:
             select(WifiCode).where(
                 and_(
                     WifiCode.usage_status == WifiUsageStatus.UNUSED,
-                    WifiCode.expiry_time > datetime.utcnow()
+                    WifiCode.expiry_time > datetime.now(timezone.utc)()
                 )
             )
         )
@@ -298,7 +298,7 @@ class WifiService:
             select(WifiCode).where(
                 and_(
                     WifiCode.usage_status == WifiUsageStatus.UNUSED,
-                    WifiCode.expiry_time <= datetime.utcnow()
+                    WifiCode.expiry_time <= datetime.now(timezone.utc)()
                 )
             )
         )
@@ -340,4 +340,59 @@ class WifiService:
             "usage_mb": usage_data.get("usage_mb", 0),
             "remaining_mb": usage_data.get("remaining_mb", 500),
             "status": "active" if usage_data.get("remaining_mb", 500) > 0 else "exhausted"
+        }
+    
+    @staticmethod
+    async def generate_qr_code(wifi_code: str) -> str:
+        """Generate QR code data for WiFi code."""
+        return WifiService.generate_qr_code_data(wifi_code)
+    
+    @staticmethod
+    async def activate_wifi_code(
+        session: AsyncSession,
+        code_id: str,
+        device_info: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Activate a WiFi code."""
+        result = await session.execute(
+            select(WifiCode).where(WifiCode.id == code_id)
+        )
+        wifi_code = result.scalar_one_or_none()
+        
+        if not wifi_code:
+            return {
+                "success": False,
+                "message": "WiFi code not found"
+            }
+        
+        # Check if code is still valid
+        if wifi_code.expiry_time < datetime.now(timezone.utc)():
+            return {
+                "success": False,
+                "message": "WiFi code has expired"
+            }
+        
+        if wifi_code.usage_status != WifiUsageStatus.UNUSED:
+            return {
+                "success": False,
+                "message": "WiFi code has already been used"
+            }
+        
+        # Mock activation
+        return {
+            "success": True,
+            "message": "WiFi code activated successfully",
+            "session_duration_minutes": 480,  # 8 hours
+            "bandwidth_remaining_mb": wifi_code.bandwidth_limit_mb or 500
+        }
+    
+    @staticmethod
+    async def get_usage_stats(code_id: str) -> Dict[str, Any]:
+        """Get usage statistics for a WiFi code."""
+        # Mock usage statistics
+        return {
+            "total_usage_mb": random.randint(0, 200),
+            "remaining_bandwidth_mb": random.randint(300, 500),
+            "session_count": random.randint(1, 5),
+            "last_used": (datetime.now(timezone.utc)() - timedelta(hours=random.randint(1, 24))).isoformat()
         } 

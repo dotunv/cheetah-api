@@ -1,7 +1,7 @@
 import asyncio
 import json
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Any, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
@@ -269,6 +269,33 @@ class BookingService:
         return booking_list
 
     @staticmethod
+    async def get_guest_bookings(
+        session: AsyncSession,
+        guest_email: str,
+        limit: int = 50,
+        offset: int = 0,
+        status: Optional[BookingStatus] = None
+    ) -> List[Dict[str, Any]]:
+        """Get bookings for a specific guest email."""
+        query = select(Booking).where(Booking.guest_email == guest_email)
+        
+        if status:
+            query = query.where(Booking.booking_status == status)
+        
+        query = query.order_by(Booking.created_at.desc()).limit(limit).offset(offset)
+        
+        result = await session.execute(query)
+        bookings = result.scalars().all()
+        
+        booking_list = []
+        for booking in bookings:
+            booking_data = await BookingService.get_booking_details(session, str(booking.id))
+            if booking_data:
+                booking_list.append(booking_data)
+        
+        return booking_list
+
+    @staticmethod
     async def get_all_bookings(
         session: AsyncSession,
         limit: int = 50,
@@ -319,17 +346,17 @@ class BookingService:
         
         # Update booking status
         booking.booking_status = BookingStatus.CANCELLED
-        booking.updated_at = datetime.utcnow()
+        booking.updated_at = datetime.now(timezone.utc)()
         
         # Cancel insurance policy if exists
         if booking.insurance_policy:
             booking.insurance_policy.status = InsuranceStatus.CANCELLED
-            booking.insurance_policy.updated_at = datetime.utcnow()
+            booking.insurance_policy.updated_at = datetime.now(timezone.utc)()
         
         # Cancel WiFi code if exists
         if booking.wifi_code:
             booking.wifi_code.usage_status = WifiUsageStatus.EXPIRED
-            booking.wifi_code.updated_at = datetime.utcnow()
+            booking.wifi_code.updated_at = datetime.now(timezone.utc)()
         
         await session.commit()
         return True
@@ -355,7 +382,7 @@ class BookingService:
             return False
 
         booking.booking_status = BookingStatus.CONFIRMED
-        booking.updated_at = datetime.utcnow()
+        booking.updated_at = datetime.now(timezone.utc)()
         await session.commit()
         return True
     

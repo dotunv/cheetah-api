@@ -8,7 +8,7 @@ from .database.database import lifespan
 from .database.config import get_settings
 
 # Import routers
-from .routers import users, auth, bookings, payments
+from .routers import users, auth, bookings, payments, insurance, wifi, providers, analytics
 
 
 @asynccontextmanager
@@ -90,4 +90,8 @@ app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 app.include_router(users.router, prefix="/users", tags=["Users"])
 app.include_router(bookings.router, prefix="/bookings", tags=["Bookings"])
 app.include_router(payments.router, prefix="/payments", tags=["Payments"])
+app.include_router(insurance.router, prefix="/insurance-policies", tags=["Insurance"])
+app.include_router(wifi.router, prefix="/wifi-codes", tags=["WiFi"])
+app.include_router(providers.router, prefix="/providers", tags=["Transport Providers"])
+app.include_router(analytics.router, prefix="/admin/analytics", tags=["Analytics"])
 

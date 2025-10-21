@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, Float, Text, ForeignKey, Enum
 from sqlalchemy.orm import relationship, Mapped
@@ -67,8 +67,8 @@ class User(Base):
     role: Mapped[UserRole] = Column(Enum(UserRole), default=UserRole.CUSTOMER)
     is_active: Mapped[bool] = Column(Boolean, default=True)
     is_verified: Mapped[bool] = Column(Boolean, default=False)
-    created_at: Mapped[datetime] = Column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[datetime] = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     
     # Relationships
     bookings: Mapped[List["Booking"]] = relationship("Booking", back_populates="user")
@@ -89,8 +89,8 @@ class TransportProvider(Base):
     api_endpoint: Mapped[Optional[str]] = Column(String(500))
     api_key: Mapped[Optional[str]] = Column(String(255))
     is_active: Mapped[bool] = Column(Boolean, default=True)
-    created_at: Mapped[datetime] = Column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[datetime] = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     
     # Relationships
     routes: Mapped[List["Route"]] = relationship("Route", back_populates="provider")
@@ -109,8 +109,8 @@ class Route(Base):
     distance_km: Mapped[Optional[float]] = Column(Float)
     estimated_duration_hours: Mapped[Optional[float]] = Column(Float)
     is_active: Mapped[bool] = Column(Boolean, default=True)
-    created_at: Mapped[datetime] = Column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[datetime] = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     
     # Relationships
     provider: Mapped["TransportProvider"] = relationship("TransportProvider", back_populates="routes")
@@ -134,8 +134,8 @@ class Schedule(Base):
     vehicle_type: Mapped[Optional[str]] = Column(String(100))  # e.g., "Sprinter", "Luxury Bus"
     amenities: Mapped[Optional[str]] = Column(Text)  # JSON string of amenities
     is_active: Mapped[bool] = Column(Boolean, default=True)
-    created_at: Mapped[datetime] = Column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[datetime] = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     
     # Relationships
     provider: Mapped["TransportProvider"] = relationship("TransportProvider", back_populates="schedules")
@@ -160,8 +160,8 @@ class Booking(Base):
     passenger_details: Mapped[str] = Column(Text, nullable=False)  # JSON string of passenger details
     provider_booking_reference: Mapped[Optional[str]] = Column(String(100))  # Provider's booking reference
     notes: Mapped[Optional[str]] = Column(Text)
-    created_at: Mapped[datetime] = Column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[datetime] = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     
     # Relationships
     user: Mapped[Optional["User"]] = relationship("User", back_populates="bookings")
@@ -184,8 +184,8 @@ class InsurancePolicy(Base):
     end_date: Mapped[datetime] = Column(DateTime, nullable=False)
     coverage_amount: Mapped[float] = Column(Float, nullable=False, default=1000000.0)  # 1M Naira default
     provider_policy_id: Mapped[Optional[str]] = Column(String(100))  # Insurance partner's policy ID
-    created_at: Mapped[datetime] = Column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[datetime] = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     
     # Relationships
     booking: Mapped["Booking"] = relationship("Booking", back_populates="insurance_policy")
@@ -204,8 +204,8 @@ class WifiCode(Base):
     usage_status: Mapped[WifiUsageStatus] = Column(Enum(WifiUsageStatus), default=WifiUsageStatus.UNUSED)
     bandwidth_limit_mb: Mapped[Optional[int]] = Column(Integer, default=500)  # 500MB default
     provider_code_id: Mapped[Optional[str]] = Column(String(100))  # WiFi provider's code ID
-    created_at: Mapped[datetime] = Column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[datetime] = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     
     # Relationships
     booking: Mapped["Booking"] = relationship("Booking", back_populates="wifi_code")

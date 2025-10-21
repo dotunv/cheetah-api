@@ -1,6 +1,6 @@
 import asyncio
 import httpx
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Any, Optional
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -126,7 +126,7 @@ class TransportProviderService:
             existing_provider.website_url = website_url
             existing_provider.api_endpoint = api_endpoint
             existing_provider.api_key = api_key
-            existing_provider.updated_at = datetime.utcnow()
+            existing_provider.updated_at = datetime.now(timezone.utc)()
 
             await session.commit()
             await session.refresh(existing_provider)
@@ -346,7 +346,7 @@ class TransportProviderService:
                 "passenger_count": len(passenger_details),
                 "contact_email": contact_email,
                 "contact_phone": contact_phone,
-                "booking_time": datetime.utcnow().isoformat()
+                "booking_time": datetime.now(timezone.utc)().isoformat()
             }
         }
 

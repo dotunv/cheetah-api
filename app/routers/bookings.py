@@ -157,14 +157,28 @@ async def get_booking_details(
     booking_id: str,
     current_user: Optional[dict] = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
+    guest_email: Optional[str] = Query(None, description="Guest email for verification")
 ):
     details = await BookingService.get_booking_details(session, booking_id)
     if not details:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
 
+    # Access control logic
     if current_user:
+        # Authenticated user access
         user_id = current_user["id"]
         if details.get("user_id") and details["user_id"] != user_id and current_user["role"] != "admin":
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+    else:
+        # Guest access - require email verification
+        if not guest_email:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, 
+                detail="Guest email is required for accessing booking details"
+            )
+        
+        # Verify the guest email matches the booking
+        if details.get("guest_email") != guest_email:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
     return details
@@ -193,30 +207,80 @@ async def cancel_booking(
     booking_id: str,
     current_user: Optional[dict] = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
+    guest_email: Optional[str] = Query(None, description="Guest email for verification")
 ):
+    # Verify access before cancelling
+    booking_details = await BookingService.get_booking_details(session, booking_id)
+    if not booking_details:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
+    
+    # Access control
+    if current_user:
+        user_id = current_user["id"]
+        if booking_details.get("user_id") and booking_details["user_id"] != user_id and current_user["role"] != "admin":
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+    else:
+        # Guest access - require email verification
+        if not guest_email:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Guest email is required for cancelling bookings"
+            )
+        if booking_details.get("guest_email") != guest_email:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+
     success = await BookingService.cancel_booking(
         session=session, booking_id=booking_id, user_id=(current_user["id"] if current_user else None)
     )
     if not success:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found or cannot be cancelled")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Booking cannot be cancelled")
 
     AuditService.log_action(
         action="booking_cancelled",
         entity_type="booking",
         entity_id=booking_id,
         actor_id=(current_user["id"] if current_user else None),
-        actor_role=(current_user["role"] if current_user else None),
-        metadata={},
+        actor_role=(current_user["role"] if current_user else "guest"),
+        metadata={"guest_email": guest_email} if guest_email else {},
     )
     return {"message": "Booking cancelled successfully"}
 
 
 @router.get("/reference/{booking_reference}", response_model=Dict[str, Any])
-async def get_booking_by_reference(booking_reference: str, session: AsyncSession = Depends(get_db)):
+async def get_booking_by_reference(
+    booking_reference: str, 
+    session: AsyncSession = Depends(get_db),
+    guest_email: Optional[str] = Query(None, description="Guest email for verification")
+):
     details = await BookingService.get_booking_by_reference(session, booking_reference)
     if not details:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
+    
+    # For guest bookings, verify email matches
+    if details.get("guest_email") and guest_email:
+        if details.get("guest_email") != guest_email:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+    
     return details
+
+
+@router.get("/guest/{email}", response_model=List[Dict[str, Any]])
+async def get_guest_bookings(
+    email: EmailStr,
+    session: AsyncSession = Depends(get_db),
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    status: Optional[BookingStatus] = Query(None)
+):
+    """Get all bookings for a guest email address."""
+    bookings = await BookingService.get_guest_bookings(
+        session=session,
+        guest_email=email,
+        limit=limit,
+        offset=offset,
+        status=status
+    )
+    return bookings
 
 
 @router.get("/price-comparison")
@@ -271,6 +335,27 @@ async def get_price_comparison(
         "fastest_option": min(routes, key=lambda x: x["duration_minutes"]) if routes else None,
         "search_criteria": {"origin": origin, "destination": destination, "date": date.isoformat()},
     }
+
+
+@router.get("/providers", response_model=List[Dict[str, Any]])
+async def get_all_providers(session: AsyncSession = Depends(get_db)):
+    """Get all active transport providers."""
+    providers = await TransportProviderService.get_all_providers(session)
+    return [
+        {
+            "id": str(provider.id),
+            "name": provider.name,
+            "code": provider.code,
+            "transport_type": provider.transport_type.value,
+            "contact_email": provider.contact_email,
+            "contact_phone": provider.contact_phone,
+            "website_url": provider.website_url,
+            "is_active": provider.is_active,
+            "created_at": provider.created_at.isoformat(),
+            "updated_at": provider.updated_at.isoformat()
+        }
+        for provider in providers
+    ]
 
 
 @router.get("/providers/statistics", response_model=Dict[str, Any])

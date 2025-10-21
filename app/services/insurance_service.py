@@ -1,6 +1,6 @@
 import uuid
 import random
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Any, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -214,7 +214,7 @@ class InsuranceService:
         
         # Update policy status
         policy.status = InsuranceStatus.CANCELLED
-        policy.updated_at = datetime.utcnow()
+        policy.updated_at = datetime.now(timezone.utc)()
         
         await session.commit()
         return True
@@ -228,7 +228,7 @@ class InsuranceService:
         query = select(InsurancePolicy).where(
             and_(
                 InsurancePolicy.status == InsuranceStatus.ACTIVE,
-                InsurancePolicy.end_date > datetime.utcnow()
+                InsurancePolicy.end_date > datetime.now(timezone.utc)()
             )
         )
         
@@ -260,7 +260,7 @@ class InsuranceService:
             select(InsurancePolicy).where(
                 and_(
                     InsurancePolicy.status == InsuranceStatus.ACTIVE,
-                    InsurancePolicy.end_date > datetime.utcnow()
+                    InsurancePolicy.end_date > datetime.now(timezone.utc)()
                 )
             )
         )
@@ -309,4 +309,58 @@ class InsuranceService:
             "status": "submitted",
             "message": "Claim submitted successfully",
             "estimated_processing_time": "5-7 business days"
+        }
+    
+    @staticmethod
+    async def submit_claim(
+        session: AsyncSession,
+        policy_id: str,
+        user_id: str,
+        claim_details: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Submit an insurance claim."""
+        # Mock claim submission
+        claim_id = f"CLM{datetime.now().strftime('%Y%m%d%H%M%S')}{str(uuid.uuid4())[:6].upper()}"
+        
+        return {
+            "claim_id": claim_id,
+            "policy_id": policy_id,
+            "status": "submitted",
+            "claim_number": f"INS-{claim_id}",
+            "submitted_at": datetime.now(timezone.utc)().isoformat(),
+            "estimated_processing_time": "5-7 business days"
+        }
+    
+    @staticmethod
+    async def get_coverage_details(policy_id: str) -> Dict[str, Any]:
+        """Get detailed coverage information for a policy."""
+        # Mock coverage details
+        return {
+            "accident_coverage": {
+                "death_benefit": 1000000.0,
+                "permanent_disability": 500000.0,
+                "temporary_disability": 100000.0,
+                "medical_expenses": 200000.0
+            },
+            "coverage_scope": [
+                "Accidental death during travel",
+                "Permanent disability from accident",
+                "Temporary disability from accident",
+                "Medical expenses from accident",
+                "Emergency medical evacuation"
+            ],
+            "exclusions": [
+                "Pre-existing medical conditions",
+                "Suicide or self-inflicted injuries",
+                "War or terrorism",
+                "Under influence of drugs/alcohol",
+                "Risky activities not related to travel"
+            ],
+            "claim_process": [
+                "Report incident within 48 hours",
+                "Submit required documentation",
+                "Medical examination if required",
+                "Claim review and processing",
+                "Payment within 30 days of approval"
+            ]
         } 
