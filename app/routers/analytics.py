@@ -80,7 +80,7 @@ async def get_booking_trends(
     
     # Set default date range if not provided
     if not end_date:
-        end_date = datetime.now(timezone.utc)()
+        end_date = datetime.now(timezone.utc)
     if not start_date:
         start_date = end_date - timedelta(days=30)
     
@@ -149,7 +149,7 @@ async def get_user_demographics(
     total_users = len(total_users_result.scalars().all())
     
     # Active users (users with bookings in last 30 days)
-    thirty_days_ago = datetime.now(timezone.utc)() - timedelta(days=30)
+    thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
     active_users_result = await session.execute(
         select(User).join(Booking, User.id == Booking.user_id)
         .where(Booking.created_at >= thirty_days_ago)
@@ -272,7 +272,7 @@ async def get_revenue_analytics(
     
     # Set default date range
     if not end_date:
-        end_date = datetime.now(timezone.utc)()
+        end_date = datetime.now(timezone.utc)
     if not start_date:
         start_date = end_date - timedelta(days=30)
     
@@ -408,8 +408,8 @@ async def get_admin_dashboard(
     
     # Get all analytics data
     booking_trends = await get_booking_trends(
-        start_date=datetime.now(timezone.utc)() - timedelta(days=30),
-        end_date=datetime.now(timezone.utc)(),
+    start_date=datetime.now(timezone.utc) - timedelta(days=30),
+    end_date=datetime.now(timezone.utc),
         current_user=current_user,
         session=session
     )
@@ -425,8 +425,8 @@ async def get_admin_dashboard(
     )
     
     revenue_analytics = await get_revenue_analytics(
-        start_date=datetime.now(timezone.utc)() - timedelta(days=30),
-        end_date=datetime.now(timezone.utc)(),
+    start_date=datetime.now(timezone.utc) - timedelta(days=30),
+    end_date=datetime.now(timezone.utc),
         current_user=current_user,
         session=session
     )
@@ -442,5 +442,5 @@ async def get_admin_dashboard(
         "provider_performance": [p.dict() for p in provider_performance],
         "revenue_analytics": revenue_analytics.dict(),
         "system_stats": system_stats.dict(),
-        "last_updated": datetime.now(timezone.utc)().isoformat()
+        "last_updated": datetime.now(timezone.utc).isoformat()
     }

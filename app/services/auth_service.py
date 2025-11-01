@@ -32,9 +32,9 @@ class AuthService:
         """Create JWT access token."""
         to_encode = data.copy()
         if expires_delta:
-            expire = datetime.now(timezone.utc)() + expires_delta
+            expire = datetime.now(timezone.utc) + expires_delta
         else:
-            expire = datetime.now(timezone.utc)() + timedelta(minutes=get_settings().ACCESS_TOKEN_EXPIRE_MINUTES)
+            expire = datetime.now(timezone.utc) + timedelta(minutes=get_settings().ACCESS_TOKEN_EXPIRE_MINUTES)
         
         to_encode.update({"exp": expire})
         encoded_jwt = jwt.encode(to_encode, get_settings().SECRET_KEY, algorithm=get_settings().ALGORITHM)
@@ -125,7 +125,7 @@ class AuthService:
             return False
         
         user.hashed_password = AuthService.get_password_hash(new_password)
-        user.updated_at = datetime.now(timezone.utc)()
+        user.updated_at = datetime.now(timezone.utc)
         
         await session.commit()
         return True
@@ -138,7 +138,7 @@ class AuthService:
             return False
         
         user.is_active = False
-        user.updated_at = datetime.now(timezone.utc)()
+        user.updated_at = datetime.now(timezone.utc)
         
         await session.commit()
         return True
@@ -151,7 +151,7 @@ class AuthService:
             return False
         
         user.is_active = True
-        user.updated_at = datetime.now(timezone.utc)()
+        user.updated_at = datetime.now(timezone.utc)
         
         await session.commit()
         return True
@@ -162,7 +162,7 @@ class AuthService:
         data = {
             "sub": str(user_id),
             "type": "email_verification",
-            "exp": datetime.now(timezone.utc)() + timedelta(hours=24)
+            "exp": datetime.now(timezone.utc) + timedelta(hours=24)
         }
         return AuthService.create_access_token(data)
     
@@ -172,6 +172,6 @@ class AuthService:
         data = {
             "sub": email,
             "type": "password_reset",
-            "exp": datetime.now(timezone.utc)() + timedelta(hours=1)
+            "exp": datetime.now(timezone.utc) + timedelta(hours=1)
         }
         return AuthService.create_access_token(data)

@@ -22,7 +22,7 @@ class AuditService:
     ) -> None:
         try:
             payload = {
-                "ts": datetime.now(timezone.utc)().isoformat(),
+                "ts": datetime.now(timezone.utc).isoformat(),
                 "action": action,
                 "entity_type": entity_type,
                 "entity_id": entity_id,

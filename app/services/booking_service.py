@@ -346,17 +346,17 @@ class BookingService:
         
         # Update booking status
         booking.booking_status = BookingStatus.CANCELLED
-        booking.updated_at = datetime.now(timezone.utc)()
+        booking.updated_at = datetime.now(timezone.utc)
         
         # Cancel insurance policy if exists
         if booking.insurance_policy:
-            booking.insurance_policy.status = InsuranceStatus.CANCELLED
-            booking.insurance_policy.updated_at = datetime.now(timezone.utc)()
+        booking.insurance_policy.status = InsuranceStatus.CANCELLED
+        booking.insurance_policy.updated_at = datetime.now(timezone.utc)
         
         # Cancel WiFi code if exists
         if booking.wifi_code:
-            booking.wifi_code.usage_status = WifiUsageStatus.EXPIRED
-            booking.wifi_code.updated_at = datetime.now(timezone.utc)()
+        booking.wifi_code.usage_status = WifiUsageStatus.EXPIRED
+        booking.wifi_code.updated_at = datetime.now(timezone.utc)
         
         await session.commit()
         return True
@@ -382,7 +382,7 @@ class BookingService:
             return False
 
         booking.booking_status = BookingStatus.CONFIRMED
-        booking.updated_at = datetime.now(timezone.utc)()
+        booking.updated_at = datetime.now(timezone.utc)
         await session.commit()
         return True
     

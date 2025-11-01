@@ -214,7 +214,7 @@ class InsuranceService:
         
         # Update policy status
         policy.status = InsuranceStatus.CANCELLED
-        policy.updated_at = datetime.now(timezone.utc)()
+        policy.updated_at = datetime.now(timezone.utc)
         
         await session.commit()
         return True
@@ -228,7 +228,7 @@ class InsuranceService:
         query = select(InsurancePolicy).where(
             and_(
                 InsurancePolicy.status == InsuranceStatus.ACTIVE,
-                InsurancePolicy.end_date > datetime.now(timezone.utc)()
+                InsurancePolicy.end_date > datetime.now(timezone.utc)
             )
         )
         
@@ -260,7 +260,7 @@ class InsuranceService:
             select(InsurancePolicy).where(
                 and_(
                     InsurancePolicy.status == InsuranceStatus.ACTIVE,
-                    InsurancePolicy.end_date > datetime.now(timezone.utc)()
+                    InsurancePolicy.end_date > datetime.now(timezone.utc)
                 )
             )
         )
@@ -327,7 +327,7 @@ class InsuranceService:
             "policy_id": policy_id,
             "status": "submitted",
             "claim_number": f"INS-{claim_id}",
-            "submitted_at": datetime.now(timezone.utc)().isoformat(),
+            "submitted_at": datetime.now(timezone.utc).isoformat(),
             "estimated_processing_time": "5-7 business days"
         }
     

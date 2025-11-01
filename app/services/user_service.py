@@ -55,7 +55,7 @@ class UserService:
         if phone is not None:
             user.phone = phone
         
-        user.updated_at = datetime.now(timezone.utc)()
+        user.updated_at = datetime.now(timezone.utc)
         await session.commit()
         await session.refresh(user)
         
@@ -202,7 +202,7 @@ class UserService:
                 and_(
                     InsurancePolicy.user_id == user_id,
                     InsurancePolicy.status == "active",
-                    InsurancePolicy.end_date > datetime.now(timezone.utc)()
+                    InsurancePolicy.end_date > datetime.now(timezone.utc)
                 )
             )
         )
@@ -216,7 +216,7 @@ class UserService:
                 and_(
                     Booking.user_id == user_id,
                     WifiCode.usage_status == "unused",
-                    WifiCode.expiry_time > datetime.now(timezone.utc)()
+                    WifiCode.expiry_time > datetime.now(timezone.utc)
                 )
             )
         )

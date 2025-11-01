@@ -28,27 +28,76 @@ class TransportProviderService:
         filters: Optional[Dict[str, Any]] = None
     ) -> List[Dict[str, Any]]:
         """Search for routes across all enabled providers."""
-        enabled_providers = get_settings().ENABLED_PROVIDERS.split(",")
-        
-        # Get schedules from all providers concurrently
-        tasks: List[asyncio.Task] = []
-        for provider_code in enabled_providers:
-            provider_code = provider_code.strip()
-            if provider_code:
-                tasks.append(
-                    TransportProviderService.mock_get_schedules(
-                        provider_code, origin, destination, date
-                    )
+        # Search in the database for matching routes and schedules
+        routes_result = await session.execute(
+            select(Route).where(
+                and_(
+                    Route.origin.ilike(f"%{origin}%"),
+                    Route.destination.ilike(f"%{destination}%"),
+                    Route.is_active == True
                 )
+            )
+        )
+        routes = routes_result.scalars().all()
         
-        # Execute all provider API calls concurrently
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        if not routes:
+            return []
         
-        # Combine and normalize results
+        # Get schedules for matching routes
+        route_ids = [route.id for route in routes]
+        
+        # Convert timezone-aware datetime to timezone-naive for database comparison
+        # The database stores timestamps without timezone info
+        if date.tzinfo is not None:
+            # Convert to UTC and remove timezone info
+            date_naive = date.astimezone(timezone.utc).replace(tzinfo=None)
+        else:
+            date_naive = date
+            
+        start_of_day = date_naive.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_of_day = date_naive.replace(hour=23, minute=59, second=59, microsecond=999999)
+        
+        schedules_result = await session.execute(
+            select(Schedule).where(
+                and_(
+                    Schedule.route_id.in_(route_ids),
+                    Schedule.is_active == True,
+                    Schedule.departure_time >= start_of_day,
+                    Schedule.departure_time <= end_of_day
+                )
+            )
+        )
+        schedules = schedules_result.scalars().all()
+        
+        # Format results
         all_schedules: List[Dict[str, Any]] = []
-        for result in results:
-            if isinstance(result, list):
-                all_schedules.extend(result)
+        for schedule in schedules:
+            route = next((r for r in routes if r.id == schedule.route_id), None)
+            if route:
+                provider_result = await session.execute(
+                    select(TransportProvider).where(TransportProvider.id == route.provider_id)
+                )
+                provider = provider_result.scalar_one_or_none()
+                
+                if provider:
+                    schedule_data = {
+                        "schedule_id": str(schedule.id),
+                        "route_id": str(route.id),
+                        "provider_code": provider.code,
+                        "provider_name": provider.name,
+                        "origin": route.origin,
+                        "destination": route.destination,
+                        "departure_time": schedule.departure_time.isoformat(),
+                        "arrival_time": schedule.arrival_time.isoformat(),
+                        "duration_minutes": schedule.duration_minutes,
+                        "total_seats": schedule.total_seats,
+                        "available_seats": schedule.available_seats,
+                        "base_price": schedule.base_price,
+                        "vehicle_type": schedule.vehicle_type,
+                        "amenities": schedule.amenities if isinstance(schedule.amenities, list) else [],
+                        "is_active": schedule.is_active
+                    }
+                    all_schedules.append(schedule_data)
         
         # Apply filters if provided
         if filters:
@@ -126,7 +175,7 @@ class TransportProviderService:
             existing_provider.website_url = website_url
             existing_provider.api_endpoint = api_endpoint
             existing_provider.api_key = api_key
-            existing_provider.updated_at = datetime.now(timezone.utc)()
+            existing_provider.updated_at = datetime.now(timezone.utc)
 
             await session.commit()
             await session.refresh(existing_provider)
@@ -346,7 +395,7 @@ class TransportProviderService:
                 "passenger_count": len(passenger_details),
                 "contact_email": contact_email,
                 "contact_phone": contact_phone,
-                "booking_time": datetime.now(timezone.utc)().isoformat()
+                "booking_time": datetime.now(timezone.utc).isoformat()
             }
         }
 

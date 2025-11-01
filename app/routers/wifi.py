@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 
@@ -244,7 +244,7 @@ async def get_wifi_qr_code(
     if not wifi_code.qr_code_data:
         qr_data = await WifiService.generate_qr_code(wifi_code.code)
         wifi_code.qr_code_data = qr_data
-        wifi_code.updated_at = datetime.now(timezone.utc)()
+        wifi_code.updated_at = datetime.now(timezone.utc)
         await session.commit()
     
     return {
@@ -281,9 +281,9 @@ async def activate_wifi_code(
         )
     
     # Check if code is still valid
-    if wifi_code.expiry_time < datetime.now(timezone.utc)():
+    if wifi_code.expiry_time < datetime.now(timezone.utc):
         wifi_code.usage_status = WifiUsageStatus.EXPIRED
-        wifi_code.updated_at = datetime.now(timezone.utc)()
+        wifi_code.updated_at = datetime.now(timezone.utc)
         await session.commit()
         
         raise HTTPException(
@@ -308,7 +308,7 @@ async def activate_wifi_code(
     if activation_result["success"]:
         # Update code status
         wifi_code.usage_status = WifiUsageStatus.ACTIVE
-        wifi_code.updated_at = datetime.now(timezone.utc)()
+        wifi_code.updated_at = datetime.now(timezone.utc)
         await session.commit()
     
     return WifiActivationResponse(**activation_result)
@@ -436,7 +436,7 @@ async def extend_wifi_code(
     
     # Extend expiry time
     wifi_code.expiry_time = wifi_code.expiry_time + timedelta(hours=extension_hours)
-    wifi_code.updated_at = datetime.now(timezone.utc)()
+    wifi_code.updated_at = datetime.now(timezone.utc)
     await session.commit()
     
     return {

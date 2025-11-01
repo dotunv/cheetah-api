@@ -81,7 +81,6 @@ class WebhookRequest(BaseModel):
 # ---- Public Endpoints ----
 @router.get("/", response_model=List[ProviderResponse])
 async def get_all_providers(
-    current_user: Optional[dict] = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
     active_only: bool = Query(True)
 ):
@@ -111,7 +110,6 @@ async def get_all_providers(
 @router.get("/{provider_id}", response_model=ProviderResponse)
 async def get_provider(
     provider_id: str,
-    current_user: Optional[dict] = Depends(get_current_user),
     session: AsyncSession = Depends(get_db)
 ):
     """Get single transport provider details."""
@@ -143,7 +141,6 @@ async def get_provider(
 @router.get("/code/{provider_code}", response_model=ProviderResponse)
 async def get_provider_by_code(
     provider_code: str,
-    current_user: Optional[dict] = Depends(get_current_user),
     session: AsyncSession = Depends(get_db)
 ):
     """Get transport provider by code."""
@@ -267,7 +264,7 @@ async def update_provider(
     if provider_data.is_active is not None:
         provider.is_active = provider_data.is_active
     
-    provider.updated_at = datetime.now(timezone.utc)()
+    provider.updated_at = datetime.now(timezone.utc)
     await session.commit()
     await session.refresh(provider)
     
@@ -320,7 +317,7 @@ async def upload_schedules_batch(
         "file_name": file.filename,
         "file_size": len(content),
         "status": "processing",
-        "estimated_completion": (datetime.now(timezone.utc)().timestamp() + 300)  # 5 minutes
+        "estimated_completion": (datetime.now(timezone.utc).timestamp() + 300)  # 5 minutes
     }
 
 
@@ -356,7 +353,7 @@ async def update_schedule(
         "message": f"Schedule {schedule_id} updated for {provider.name}",
         "schedule_id": schedule_id,
         "updated_fields": [k for k, v in schedule_data.dict().items() if v is not None],
-        "updated_at": datetime.now(timezone.utc)().isoformat()
+        "updated_at": datetime.now(timezone.utc).isoformat()
     }
 
 
@@ -385,14 +382,13 @@ async def webhook_schedule_update(
         "message": f"Webhook received from {provider.name}",
         "schedule_id": webhook_data.schedule_id,
         "status": "processed",
-        "received_at": datetime.now(timezone.utc)().isoformat()
+        "received_at": datetime.now(timezone.utc).isoformat()
     }
 
 
 @router.get("/{provider_id}/schedules", response_model=List[Dict[str, Any]])
 async def get_provider_schedules(
     provider_id: str,
-    current_user: Optional[dict] = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0)
@@ -442,7 +438,6 @@ async def get_provider_schedules(
 @router.get("/{provider_id}/statistics", response_model=Dict[str, Any])
 async def get_provider_statistics(
     provider_id: str,
-    current_user: Optional[dict] = Depends(get_current_user),
     session: AsyncSession = Depends(get_db)
 ):
     """Get statistics for a specific provider."""

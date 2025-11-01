@@ -184,7 +184,7 @@ class WifiService:
         query = select(WifiCode).where(
             and_(
                 WifiCode.usage_status == WifiUsageStatus.UNUSED,
-                WifiCode.expiry_time > datetime.now(timezone.utc)()
+                WifiCode.expiry_time > datetime.now(timezone.utc)
             )
         )
         
@@ -225,12 +225,12 @@ class WifiService:
         if wifi_code.usage_status != WifiUsageStatus.UNUSED:
             return False
         
-        if wifi_code.expiry_time <= datetime.now(timezone.utc)():
+        if wifi_code.expiry_time <= datetime.now(timezone.utc):
             return False
         
         # Mark as used
         wifi_code.usage_status = WifiUsageStatus.USED
-        wifi_code.updated_at = datetime.now(timezone.utc)()
+        wifi_code.updated_at = datetime.now(timezone.utc)
         
         await session.commit()
         return True
@@ -256,7 +256,7 @@ class WifiService:
                 "message": "WiFi code has already been used"
             }
         
-        if wifi_code.expiry_time <= datetime.now(timezone.utc)():
+        if wifi_code.expiry_time <= datetime.now(timezone.utc):
             return {
                 "valid": False,
                 "message": "WiFi code has expired"
@@ -281,7 +281,7 @@ class WifiService:
             select(WifiCode).where(
                 and_(
                     WifiCode.usage_status == WifiUsageStatus.UNUSED,
-                    WifiCode.expiry_time > datetime.now(timezone.utc)()
+                    WifiCode.expiry_time > datetime.now(timezone.utc)
                 )
             )
         )
@@ -298,7 +298,7 @@ class WifiService:
             select(WifiCode).where(
                 and_(
                     WifiCode.usage_status == WifiUsageStatus.UNUSED,
-                    WifiCode.expiry_time <= datetime.now(timezone.utc)()
+                    WifiCode.expiry_time <= datetime.now(timezone.utc)
                 )
             )
         )
@@ -366,7 +366,7 @@ class WifiService:
             }
         
         # Check if code is still valid
-        if wifi_code.expiry_time < datetime.now(timezone.utc)():
+        if wifi_code.expiry_time < datetime.now(timezone.utc):
             return {
                 "success": False,
                 "message": "WiFi code has expired"
@@ -394,5 +394,5 @@ class WifiService:
             "total_usage_mb": random.randint(0, 200),
             "remaining_bandwidth_mb": random.randint(300, 500),
             "session_count": random.randint(1, 5),
-            "last_used": (datetime.now(timezone.utc)() - timedelta(hours=random.randint(1, 24))).isoformat()
+            "last_used": (datetime.now(timezone.utc) - timedelta(hours=random.randint(1, 24))).isoformat()
         } 

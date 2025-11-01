@@ -216,7 +216,7 @@ class PaymentService:
             "provider": provider,
             "authorization_url": f"https://checkout.{provider}.com/pay/{payment_reference}",
             "access_code": str(uuid.uuid4()),
-            "expires_at": (datetime.now(timezone.utc)().timestamp() + 3600),  # 1 hour
+            "expires_at": (datetime.now(timezone.utc).timestamp() + 3600),  # 1 hour
             "user_email": user_email,
             "user_phone": user_phone
         }
@@ -243,7 +243,7 @@ class PaymentService:
             "provider": provider,
             "transaction_id": f"TXN_{str(uuid.uuid4())[:8]}" if is_successful else None,
             "gateway_response": "Approved" if is_successful else "Declined",
-            "paid_at": datetime.now(timezone.utc)().isoformat() if is_successful else None,
+            "paid_at": datetime.now(timezone.utc).isoformat() if is_successful else None,
             "message": "Payment successful" if is_successful else "Payment failed"
         }
     
@@ -267,7 +267,7 @@ class PaymentService:
             "currency": "NGN",
             "booking_reference": booking_reference,
             "reason": reason,
-            "processed_at": datetime.now(timezone.utc)().isoformat() if is_successful else None,
+            "processed_at": datetime.now(timezone.utc).isoformat() if is_successful else None,
             "message": "Refund processed successfully" if is_successful else "Refund failed"
         }
     

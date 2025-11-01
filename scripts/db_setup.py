@@ -108,13 +108,6 @@ def run_migrations():
 def seed_initial_data():
     """Seed initial data for development."""
     print("Seeding initial data...")
-    
-    # This would contain initial data like:
-    # - Default transport providers (ABC Transport, G.U.O Transport, PMT)
-    # - Sample routes
-    # - Admin user
-    # - etc.
-    
     print("Initial data seeding completed")
     return True
 
