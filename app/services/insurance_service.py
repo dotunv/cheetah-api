@@ -4,6 +4,10 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Any, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy import and_, func
+from ..database.config import get_settings
+
+_settings = get_settings()
 
 from ..database.models import InsurancePolicy, Booking, User, InsuranceStatus
 
@@ -26,7 +30,8 @@ class InsuranceService:
         """Mock API call to enroll policy with insurance partner."""
         # Simulate API delay
         import asyncio
-        await asyncio.sleep(0.3)
+        if _settings.DEBUG:
+            await asyncio.sleep(0.05)
         
         # Generate mock policy data
         policy_number = InsuranceService.generate_policy_number()
@@ -169,14 +174,24 @@ class InsuranceService:
         
         result = await session.execute(query)
         policies = result.scalars().all()
-        
-        policy_list = []
-        for policy in policies:
-            policy_data = await InsuranceService.get_policy_by_id(session, str(policy.id))
-            if policy_data:
-                policy_list.append(policy_data)
-        
-        return policy_list
+
+        return [
+            {
+                "id": str(p.id),
+                "booking_id": str(p.booking_id),
+                "user_id": str(p.user_id),
+                "policy_number": p.policy_number,
+                "coverage_details_url": p.coverage_details_url,
+                "status": p.status.value,
+                "start_date": p.start_date.isoformat(),
+                "end_date": p.end_date.isoformat(),
+                "coverage_amount": p.coverage_amount,
+                "provider_policy_id": p.provider_policy_id,
+                "created_at": p.created_at.isoformat(),
+                "updated_at": p.updated_at.isoformat(),
+            }
+            for p in policies
+        ]
     
     @staticmethod
     async def get_booking_policy(
@@ -239,14 +254,24 @@ class InsuranceService:
         
         result = await session.execute(query)
         policies = result.scalars().all()
-        
-        policy_list = []
-        for policy in policies:
-            policy_data = await InsuranceService.get_policy_by_id(session, str(policy.id))
-            if policy_data:
-                policy_list.append(policy_data)
-        
-        return policy_list
+
+        return [
+            {
+                "id": str(p.id),
+                "booking_id": str(p.booking_id),
+                "user_id": str(p.user_id),
+                "policy_number": p.policy_number,
+                "coverage_details_url": p.coverage_details_url,
+                "status": p.status.value,
+                "start_date": p.start_date.isoformat(),
+                "end_date": p.end_date.isoformat(),
+                "coverage_amount": p.coverage_amount,
+                "provider_policy_id": p.provider_policy_id,
+                "created_at": p.created_at.isoformat(),
+                "updated_at": p.updated_at.isoformat(),
+            }
+            for p in policies
+        ]
     
     @staticmethod
     async def get_insurance_statistics(session: AsyncSession) -> Dict[str, Any]:
@@ -297,7 +322,8 @@ class InsuranceService:
         """Mock API call to report a claim to insurance partner."""
         # Simulate API delay
         import asyncio
-        await asyncio.sleep(0.5)
+        if _settings.DEBUG:
+            await asyncio.sleep(0.05)
         
         # Generate claim reference
         claim_ref = f"CLM{datetime.now().strftime('%Y%m%d%H%M%S')}{random.randint(1000, 9999)}"

@@ -25,19 +25,27 @@ from app.services.mock_transport_data import MockTransportData
 async def create_transport_providers(session: AsyncSession) -> Dict[str, TransportProvider]:
     """Create transport providers from mock data."""
     providers = {}
+    new_provider_count = 0
+    existing_provider_count = 0
     
-    for code, data in MockTransportData.TRANSPORT_PROVIDERS.items():
+    for key, data in MockTransportData.TRANSPORT_PROVIDERS.items():
+        provider_code = data["code"]  # Use the actual code from data
+        
         # Check if provider already exists
         existing_result = await session.execute(
-            select(TransportProvider).where(TransportProvider.code == code)
+            select(TransportProvider).where(TransportProvider.code == provider_code)
         )
-        if existing_result.scalar_one_or_none():
-            print(f"  ⚠️  Provider {code} already exists, skipping...")
+        existing_provider = existing_result.scalar_one_or_none()
+        
+        if existing_provider:
+            print(f"  ⚠️  Provider {provider_code} already exists, skipping...")
+            providers[key] = existing_provider  # Add existing provider to dict
+            existing_provider_count += 1
             continue
         
         provider = TransportProvider(
             name=data["name"],
-            code=data["code"],
+            code=provider_code,
             transport_type=TransportType.BUS,
             contact_email=data.get("email"),
             contact_phone=data.get("phone"),
@@ -47,17 +55,20 @@ async def create_transport_providers(session: AsyncSession) -> Dict[str, Transpo
         
         session.add(provider)
         await session.flush()  # Get the ID
-        providers[code] = provider
+        providers[key] = provider  # Use the dictionary key to lookup
+        new_provider_count += 1
         
-        print(f"  ✅ Added provider: {data['name']} ({code})")
+        print(f"  ✅ Added provider: {data['name']} ({provider_code})")
     
+    print(f"  ✅ Created {new_provider_count} providers, {existing_provider_count} already existed")
     return providers
 
 
 async def create_routes(session: AsyncSession, providers: Dict[str, TransportProvider]) -> List[Route]:
     """Create routes for all providers."""
     routes = []
-    route_count = 0
+    new_route_count = 0
+    existing_route_count = 0
     
     for code, provider_data in MockTransportData.TRANSPORT_PROVIDERS.items():
         provider = providers.get(code)
@@ -85,7 +96,10 @@ async def create_routes(session: AsyncSession, providers: Dict[str, TransportPro
                     Route.destination == destination
                 )
             )
-            if existing_result.scalar_one_or_none():
+            existing_route = existing_result.scalar_one_or_none()
+            if existing_route:
+                routes.append(existing_route)  # Add existing route for schedule creation
+                existing_route_count += 1
                 continue
             
             route = Route(
@@ -101,122 +115,138 @@ async def create_routes(session: AsyncSession, providers: Dict[str, TransportPro
             session.add(route)
             await session.flush()
             routes.append(route)
-            route_count += 1
+            new_route_count += 1
     
-    print(f"  ✅ Created {route_count} routes")
+    print(f"  ✅ Created {new_route_count} routes, {existing_route_count} already existed")
     return routes
 
 
 async def create_schedules(session: AsyncSession, routes: List[Route]):
     """Create schedules for all routes."""
-    schedule_count = 0
+    new_schedule_count = 0
+    existing_schedule_count = 0
     
     # Generate schedules for the next 30 days
-    start_date = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-    
-    for route in routes:
-        provider_code = await _get_provider_code_by_id(session, route.provider_id)
-        provider_data = MockTransportData.TRANSPORT_PROVIDERS.get(provider_code, {})
-        
-        # Find route data from provider
-        route_data = None
-        for rd in provider_data.get("routes", []):
-            if (rd["origin"] == route.origin and rd["destination"] == route.destination):
-                route_data = rd
-                break
-        
-        if not route_data:
-            continue
-        
-        frequency = route_data.get("frequency", "daily")
-        duration_hours = route_data["duration_hours"]
-        
-        print(f"  ⏰ Creating schedules for {route.origin} → {route.destination} ({provider_code})...")
-        
-        # Generate schedules for next 30 days
-        for day_offset in range(30):
-            current_date = start_date + timedelta(days=day_offset)
+    start_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+
+    # Create lookup map from provider code to mock data key
+    code_to_key_map = {}
+    for key, data in MockTransportData.TRANSPORT_PROVIDERS.items():
+        code_to_key_map[data["code"]] = key
+
+    # Use no_autoflush to prevent premature flushes during bulk schedule creation
+    # This addresses the "ConnectionDoesNotExistError" by allowing explicit commits.
+    with session.no_autoflush:
+        for route in routes:
+            provider_code = await _get_provider_code_by_id(session, route.provider_id)
+            # Get the dictionary key for this provider code
+            provider_key = code_to_key_map.get(provider_code)
+            if not provider_key:
+                continue
+            provider_data = MockTransportData.TRANSPORT_PROVIDERS.get(provider_key, {})
             
-            # Get departure times based on frequency
-            departure_times = _get_departure_times(frequency, current_date)
+            # Find route data from provider
+            route_data = None
+            for rd in provider_data.get("routes", []):
+                if (rd["origin"] == route.origin and rd["destination"] == route.destination):
+                    route_data = rd
+                    break
             
-            for time_idx, departure_time in enumerate(departure_times):
-                # Skip some schedules randomly for realism (5% chance)
-                if random.random() < 0.05:
-                    continue
+            if not route_data:
+                continue
+            
+            frequency = route_data.get("frequency", "daily")
+            duration_hours = route_data["duration_hours"]
+            
+            print(f"  ⏰ Creating schedules for {route.origin} → {route.destination} ({provider_code})...")
+            
+            # Generate schedules for next 30 days
+            for day_offset in range(30):
+                current_date = start_date + timedelta(days=day_offset)
                 
-                arrival_time = departure_time + timedelta(hours=duration_hours)
-                duration_minutes = int(duration_hours * 60)
+                # Get departure times based on frequency
+                departure_times = _get_departure_times(frequency, current_date)
                 
-                # Generate schedule code
-                schedule_code = f"{provider_code.upper()}_{current_date.strftime('%Y%m%d')}_{time_idx:02d}"
-                
-                # Choose vehicle type based on provider specialties
-                vehicle_types = provider_data.get("specialties", ["AC Bus"])
-                vehicle_type = random.choice(vehicle_types)
-                
-                # Get vehicle specifications
-                vehicle_specs = MockTransportData.VEHICLE_TYPES.get(vehicle_type, MockTransportData.VEHICLE_TYPES["AC Bus"])
-                total_seats = vehicle_specs["capacity"]
-                
-                # Generate realistic seat availability (60-95% occupancy)
-                occupancy_rate = random.uniform(0.6, 0.95)
-                available_seats = max(1, int(total_seats * (1 - occupancy_rate)))
-                
-                # Calculate base price
-                base_price = MockTransportData.calculate_base_price(
-                    route.origin, route.destination, vehicle_type
-                )
-                
-                # Apply time-based pricing
-                base_price = MockTransportData.apply_time_multiplier(base_price, departure_time)
-                
-                # Apply day-of-week pricing
-                base_price = MockTransportData.apply_day_multiplier(base_price, departure_time)
-                
-                # Add some random variation (±5%)
-                price_variation = random.uniform(0.95, 1.05)
-                base_price *= price_variation
-                base_price = round(base_price, 2)
-                
-                # Get amenities for vehicle type
-                amenities = MockTransportData.get_vehicle_amenities(vehicle_type)
-                amenities_json = json.dumps(amenities)
-                
-                # Check if schedule already exists
-                existing_result = await session.execute(
-                    select(Schedule).where(
-                        Schedule.route_id == route.id,
-                        Schedule.schedule_code == schedule_code
+                for time_idx, departure_time in enumerate(departure_times):
+                    # Skip some schedules randomly for realism (5% chance)
+                    if random.random() < 0.05:
+                        continue
+                    
+                    arrival_time = departure_time + timedelta(hours=duration_hours)
+                    duration_minutes = int(duration_hours * 60)
+                    
+                    # Generate schedule code
+                    schedule_code = f"{provider_code.upper()}_{current_date.strftime('%Y%m%d')}_{time_idx:02d}"
+                    
+                    # Choose vehicle type based on provider specialties
+                    vehicle_types = provider_data.get("specialties", ["AC Bus"])
+                    vehicle_type = random.choice(vehicle_types)
+                    
+                    # Get vehicle specifications
+                    vehicle_specs = MockTransportData.VEHICLE_TYPES.get(vehicle_type, MockTransportData.VEHICLE_TYPES["AC Bus"])
+                    total_seats = vehicle_specs["capacity"]
+                    
+                    # Generate realistic seat availability (60-95% occupancy)
+                    occupancy_rate = random.uniform(0.6, 0.95)
+                    available_seats = max(1, int(total_seats * (1 - occupancy_rate)))
+                    
+                    # Calculate base price
+                    base_price = MockTransportData.calculate_base_price(
+                        route.origin, route.destination, vehicle_type
                     )
-                )
-                if existing_result.scalar_one_or_none():
-                    continue
-                
-                schedule = Schedule(
-                    provider_id=route.provider_id,
-                    route_id=route.id,
-                    schedule_code=schedule_code,
-                    departure_time=departure_time,
-                    arrival_time=arrival_time,
-                    duration_minutes=duration_minutes,
-                    total_seats=total_seats,
-                    available_seats=available_seats,
-                    base_price=base_price,
-                    vehicle_type=vehicle_type,
-                    amenities=amenities_json,
-                    is_active=True
-                )
-                
-                session.add(schedule)
-                schedule_count += 1
-                
-                # Commit in batches to avoid memory issues
-                if schedule_count % 1000 == 0:
-                    await session.commit()
-                    print(f"    📊 Created {schedule_count} schedules so far...")
+                    
+                    # Apply time-based pricing
+                    base_price = MockTransportData.apply_time_multiplier(base_price, departure_time)
+                    
+                    # Apply day-of-week pricing
+                    base_price = MockTransportData.apply_day_multiplier(base_price, departure_time)
+                    
+                    # Add some random variation (±5%)
+                    price_variation = random.uniform(0.95, 1.05)
+                    base_price *= price_variation
+                    base_price = round(base_price, 2)
+                    
+                    # Get amenities for vehicle type
+                    amenities = MockTransportData.get_vehicle_amenities(vehicle_type)
+                    amenities_json = json.dumps(amenities)
+                    
+                    # Check if schedule already exists
+                    existing_result = await session.execute(
+                        select(Schedule).where(
+                            Schedule.route_id == route.id,
+                            Schedule.schedule_code == schedule_code
+                        )
+                    )
+                    if existing_result.scalar_one_or_none():
+                        existing_schedule_count += 1
+                        continue
+                    
+                    schedule = Schedule(
+                        provider_id=route.provider_id,
+                        route_id=route.id,
+                        schedule_code=schedule_code,
+                        departure_time=departure_time,
+                        arrival_time=arrival_time,
+                        duration_minutes=duration_minutes,
+                        total_seats=total_seats,
+                        available_seats=available_seats,
+                        base_price=base_price,
+                        vehicle_type=vehicle_type,
+                        amenities=amenities_json,
+                        is_active=True,
+                        created_at=datetime.now(),
+                        updated_at=datetime.now()
+                    )
+                    
+                    session.add(schedule)
+                    new_schedule_count += 1
+                    
+                    # Commit in batches to avoid memory issues
+                    if new_schedule_count % 1000 == 0:
+                        await session.commit()
+                        print(f"    📊 Created {new_schedule_count} schedules so far...")
     
-    print(f"  ✅ Created {schedule_count} schedules")
+    print(f"  ✅ Created {new_schedule_count} schedules, {existing_schedule_count} already existed")
 
 
 def _get_distance(origin: str, destination: str) -> float:
@@ -353,12 +383,10 @@ async def main():
             # Step 1: Seed transport providers
             print("\n📦 Seeding transport providers...")
             providers = await create_transport_providers(session)
-            print(f"✅ Created {len(providers)} transport providers")
             
             # Step 2: Seed routes
             print("\n🛣️  Seeding routes...")
             routes = await create_routes(session, providers)
-            print(f"✅ Created {len(routes)} routes")
             
             # Step 3: Seed schedules
             print("\n⏰ Seeding schedules...")

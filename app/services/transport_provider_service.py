@@ -2,7 +2,7 @@ import asyncio
 import httpx
 from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Any, Optional
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 import uuid
 import json
@@ -10,7 +10,12 @@ import random
 
 from ..database.models import TransportProvider, Route, Schedule, TransportType
 from ..database.config import get_settings
+from .cache_service import cache_get, cache_set  # type: ignore
 from .mock_transport_data import MockTransportData
+import time
+
+
+_settings = get_settings()
 
 
 class TransportProviderService:
@@ -27,86 +32,145 @@ class TransportProviderService:
         date: datetime,
         filters: Optional[Dict[str, Any]] = None
     ) -> List[Dict[str, Any]]:
-        """Search for routes across all enabled providers."""
-        # Search in the database for matching routes and schedules
-        routes_result = await session.execute(
-            select(Route).where(
-                and_(
-                    Route.origin.ilike(f"%{origin}%"),
-                    Route.destination.ilike(f"%{destination}%"),
-                    Route.is_active == True
-                )
+        """Search for routes across all enabled providers.
+
+        Performance optimizations:
+        - Use SQL joins to fetch schedules, routes, and providers in one query
+        - Prefer exact match on origin/destination (frontend supplies full city names)
+        - Limit to the selected day using a precomputed day range
+        - Optional: short-lived in-memory cache per search key
+        """
+        # Short-lived cache (60s) keyed by essential params
+        cache_ttl_seconds = 60
+        now = time.time()
+        cache_key = None
+        if not hasattr(TransportProviderService, "_cache"):
+            TransportProviderService._cache = {}
+        cache = TransportProviderService._cache
+
+        # Only cache when filters set does not include time windows
+        filters = filters or {}
+        cacheable = not any(k in filters for k in ["departure_after", "departure_before"])  # time-windowed queries vary a lot
+        if cacheable:
+            cache_key = (
+                "search",
+                origin or "",
+                destination or "",
+                date.date().isoformat(),
+                ",".join(sorted(filters.get("providers", []))) if isinstance(filters.get("providers"), list) else str(filters.get("providers")),
+                ",".join(sorted(filters.get("vehicle_types", []))) if isinstance(filters.get("vehicle_types"), list) else str(filters.get("vehicle_types")),
+                str(filters.get("min_price")),
+                str(filters.get("max_price")),
+                str(filters.get("sort_by", "departure_time")),
             )
-        )
-        routes = routes_result.scalars().all()
-        
-        if not routes:
-            return []
-        
-        # Get schedules for matching routes
-        route_ids = [route.id for route in routes]
-        
-        # Convert timezone-aware datetime to timezone-naive for database comparison
-        # The database stores timestamps without timezone info
+            # Try Redis first
+            try:
+                import hashlib
+                key_hash = hashlib.sha1(str(cache_key).encode()).hexdigest()
+                redis_key = f"routes:{key_hash}"
+                cached = await cache_get(redis_key)
+                if cached:
+                    return cached
+            except Exception:
+                pass
+            # Fallback to in-memory cache
+            cached_local = cache.get(cache_key)
+            if cached_local and (now - cached_local["time"]) < cache_ttl_seconds:
+                return cached_local["data"]
+
+        # Normalize date (DB stores naive timestamps)
         if date.tzinfo is not None:
-            # Convert to UTC and remove timezone info
             date_naive = date.astimezone(timezone.utc).replace(tzinfo=None)
         else:
             date_naive = date
-            
         start_of_day = date_naive.replace(hour=0, minute=0, second=0, microsecond=0)
         end_of_day = date_naive.replace(hour=23, minute=59, second=59, microsecond=999999)
-        
-        schedules_result = await session.execute(
-            select(Schedule).where(
+
+        # Build base query joining schedules -> routes -> providers
+        query = (
+            select(
+                Schedule.id.label("schedule_id"),
+                Schedule.route_id.label("route_id"),
+                TransportProvider.code.label("provider_code"),
+                TransportProvider.name.label("provider_name"),
+                Route.origin.label("origin"),
+                Route.destination.label("destination"),
+                Schedule.departure_time.label("departure_time"),
+                Schedule.arrival_time.label("arrival_time"),
+                Schedule.duration_minutes.label("duration_minutes"),
+                Schedule.total_seats.label("total_seats"),
+                Schedule.available_seats.label("available_seats"),
+                Schedule.base_price.label("base_price"),
+                Schedule.vehicle_type.label("vehicle_type"),
+                Schedule.amenities.label("amenities"),
+            )
+            .join(Route, Schedule.route_id == Route.id)
+            .join(TransportProvider, Route.provider_id == TransportProvider.id)
+            .where(
                 and_(
-                    Schedule.route_id.in_(route_ids),
+                    Route.is_active == True,
                     Schedule.is_active == True,
                     Schedule.departure_time >= start_of_day,
-                    Schedule.departure_time <= end_of_day
+                    Schedule.departure_time <= end_of_day,
+                    # Prefer exact matches for performance; fallback to ilike if inputs are partial
+                    (Route.origin == origin) if origin else Route.origin.ilike("%"),
+                    (Route.destination == destination) if destination else Route.destination.ilike("%"),
                 )
             )
         )
-        schedules = schedules_result.scalars().all()
-        
+
+        # Apply provider filter at SQL level if provided
+        if "providers" in filters and filters["providers"]:
+            provider_codes = filters["providers"] if isinstance(filters["providers"], list) else [filters["providers"]]
+            query = query.where(TransportProvider.code.in_(provider_codes))
+
+        # Execute query
+        result = await session.execute(query)
+        rows = result.all()
+
         # Format results
         all_schedules: List[Dict[str, Any]] = []
-        for schedule in schedules:
-            route = next((r for r in routes if r.id == schedule.route_id), None)
-            if route:
-                provider_result = await session.execute(
-                    select(TransportProvider).where(TransportProvider.id == route.provider_id)
-                )
-                provider = provider_result.scalar_one_or_none()
-                
-                if provider:
-                    schedule_data = {
-                        "schedule_id": str(schedule.id),
-                        "route_id": str(route.id),
-                        "provider_code": provider.code,
-                        "provider_name": provider.name,
-                        "origin": route.origin,
-                        "destination": route.destination,
-                        "departure_time": schedule.departure_time.isoformat(),
-                        "arrival_time": schedule.arrival_time.isoformat(),
-                        "duration_minutes": schedule.duration_minutes,
-                        "total_seats": schedule.total_seats,
-                        "available_seats": schedule.available_seats,
-                        "base_price": schedule.base_price,
-                        "vehicle_type": schedule.vehicle_type,
-                        "amenities": schedule.amenities if isinstance(schedule.amenities, list) else [],
-                        "is_active": schedule.is_active
-                    }
-                    all_schedules.append(schedule_data)
-        
-        # Apply filters if provided
+        for row in rows:
+            schedule_data = {
+                "schedule_id": str(row.schedule_id),
+                "route_id": str(row.route_id),
+                "provider_code": row.provider_code,
+                "provider_name": row.provider_name,
+                "origin": row.origin,
+                "destination": row.destination,
+                "departure_time": row.departure_time.isoformat(),
+                "arrival_time": row.arrival_time.isoformat(),
+                "duration_minutes": row.duration_minutes,
+                "total_seats": row.total_seats,
+                "available_seats": row.available_seats,
+                "base_price": row.base_price,
+                "vehicle_type": row.vehicle_type,
+                "amenities": row.amenities if isinstance(row.amenities, list) else [],
+                "is_active": True,
+            }
+            all_schedules.append(schedule_data)
+
+        # Apply residual filters in Python if needed
         if filters:
             all_schedules = TransportProviderService.apply_filters(all_schedules, filters)
-        
-        # Apply sorting based on filters or default to departure time
+
+        # Sorting
         sort_by = filters.get("sort_by", "departure_time") if filters else "departure_time"
         all_schedules = TransportProviderService.apply_sorting(all_schedules, sort_by)
-        
+
+        # Store in cache
+        if cacheable and cache_key is not None:
+            # Redis
+            try:
+                import hashlib
+                key_hash = hashlib.sha1(str(cache_key).encode()).hexdigest()
+                redis_key = f"routes:{key_hash}"
+                await cache_set(redis_key, all_schedules, ttl_seconds=cache_ttl_seconds)
+            except Exception:
+                pass
+            # Local
+            cache[cache_key] = {"data": all_schedules, "time": now}
+
         return all_schedules
 
     @staticmethod
@@ -134,6 +198,59 @@ class TransportProviderService:
             "active_providers": active_providers,
             "enabled_providers": get_settings().ENABLED_PROVIDERS.split(",")
         }
+
+    @staticmethod
+    async def get_available_cities(session: AsyncSession) -> List[str]:
+        """Return a sorted list of unique cities from active routes.
+
+        This avoids expensive broad searches by querying distinct origins and destinations
+        from the `Route` table where routes are active.
+        """
+        # Simple in-memory cache with 10-minute TTL to avoid frequent DB scans
+        cache_ttl_seconds = 600
+        now = time.time()
+        cache_key = "available_cities"
+        if not hasattr(TransportProviderService, "_cache"):
+            TransportProviderService._cache = {}
+        cache = TransportProviderService._cache
+        # Redis first
+        try:
+            cached = await cache_get("available_cities")
+            if cached:
+                return cached
+        except Exception:
+            pass
+        # Local cache
+        cached_local = cache.get(cache_key)
+        if cached_local and (now - cached_local["time"]) < cache_ttl_seconds:
+            return cached_local["data"]
+        # Fetch all active routes' origins and destinations
+        routes_result = await session.execute(
+            select(Route).where(Route.is_active == True)
+        )
+        routes = routes_result.scalars().all()
+
+        unique_cities = set()
+        for route in routes:
+            if route.origin:
+                unique_cities.add(route.origin)
+            if route.destination:
+                unique_cities.add(route.destination)
+
+        # Fallback to a minimal static set if DB is empty
+        if not unique_cities:
+            unique_cities.update([
+                "Lagos", "Abuja", "Kano", "Port Harcourt", "Kaduna",
+                "Ibadan", "Enugu", "Jos", "Benin", "Warri",
+            ])
+
+        cities_sorted = sorted(unique_cities)
+        cache[cache_key] = {"data": cities_sorted, "time": now}
+        try:
+            await cache_set("available_cities", cities_sorted, ttl_seconds=cache_ttl_seconds)
+        except Exception:
+            pass
+        return cities_sorted
     
     @staticmethod
     async def get_all_providers(session: AsyncSession) -> List[TransportProvider]:
@@ -379,8 +496,9 @@ class TransportProviderService:
         contact_phone: str
     ) -> Dict[str, Any]:
         """Mock API call to book a ticket with a transport provider."""
-        # Simulate API delay
-        await asyncio.sleep(1)
+        # Simulate API delay (dev only)
+        if _settings.DEBUG:
+            await asyncio.sleep(0.05)
         
         # Generate booking reference
         booking_ref = f"{provider_code.upper()}{str(uuid.uuid4())[:8]}"

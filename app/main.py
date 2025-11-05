@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
+from fastapi.middleware.gzip import GZipMiddleware
 
 from .database.database import lifespan
 from .database.config import get_settings
@@ -59,6 +60,9 @@ app.add_middleware(
     allow_methods=_methods,  # ✅ FIXED: Using dynamic methods setting
     allow_headers=_headers,  # ✅ FIXED: Using dynamic headers setting
 )
+
+# Enable gzip compression for large responses
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 
 @app.get("/")

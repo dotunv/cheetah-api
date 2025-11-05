@@ -60,6 +60,12 @@ class RouteSearchResponse(BaseModel):
 
 
 # ---- Public Endpoints ----
+@router.get("/cities", response_model=Dict[str, List[str]])
+async def get_available_cities(session: AsyncSession = Depends(get_db)):
+    """Return a lightweight list of available cities for the booking form."""
+    cities = await TransportProviderService.get_available_cities(session)
+    return {"cities": cities}
+
 @router.get("/search")
 async def search_routes(
     origin: str = Query(..., description="Origin city"),

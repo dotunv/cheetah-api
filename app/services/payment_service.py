@@ -8,6 +8,10 @@ import json
 
 from ..database.models import Booking, PaymentStatus, User, BookingStatus
 from ..database.config import get_settings
+from sqlalchemy import func
+
+_settings = get_settings()
+from ..database.config import get_settings
 
 
 class PaymentService:
@@ -229,7 +233,8 @@ class PaymentService:
         """Mock payment verification."""
         # Simulate API call delay
         import asyncio
-        await asyncio.sleep(1)
+        if _settings.DEBUG:
+            await asyncio.sleep(0.05)
         
         # Mock verification result (80% success rate for demo)
         import random
@@ -255,7 +260,8 @@ class PaymentService:
     ) -> Dict[str, Any]:
         """Mock refund processing."""
         import asyncio
-        await asyncio.sleep(1)
+        if _settings.DEBUG:
+            await asyncio.sleep(0.05)
         
         import random
         is_successful = random.random() > 0.1  # 90% success rate
@@ -277,26 +283,32 @@ class PaymentService:
     ) -> Dict[str, Any]:
         """Get payment statistics."""
         # Total payments
-        total_payments_result = await session.execute(
-            select(Booking).where(Booking.payment_status == PaymentStatus.PAID)
-        )
-        total_payments = len(total_payments_result.scalars().all())
-        
+        total_payments = (
+            await session.execute(
+                select(func.count(Booking.id)).where(Booking.payment_status == PaymentStatus.PAID)
+            )
+        ).scalar_one()
+
         # Total revenue
-        paid_bookings = total_payments_result.scalars().all()
-        total_revenue = sum(booking.total_amount for booking in paid_bookings)
-        
+        total_revenue = (
+            await session.execute(
+                select(func.coalesce(func.sum(Booking.total_amount), 0.0)).where(Booking.payment_status == PaymentStatus.PAID)
+            )
+        ).scalar_one()
+
         # Pending payments
-        pending_payments_result = await session.execute(
-            select(Booking).where(Booking.payment_status == PaymentStatus.PENDING)
-        )
-        pending_payments = len(pending_payments_result.scalars().all())
-        
+        pending_payments = (
+            await session.execute(
+                select(func.count(Booking.id)).where(Booking.payment_status == PaymentStatus.PENDING)
+            )
+        ).scalar_one()
+
         # Failed payments
-        failed_payments_result = await session.execute(
-            select(Booking).where(Booking.payment_status == PaymentStatus.FAILED)
-        )
-        failed_payments = len(failed_payments_result.scalars().all())
+        failed_payments = (
+            await session.execute(
+                select(func.count(Booking.id)).where(Booking.payment_status == PaymentStatus.FAILED)
+            )
+        ).scalar_one()
         
         return {
             "total_payments": total_payments,

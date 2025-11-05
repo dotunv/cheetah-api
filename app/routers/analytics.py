@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
 
 from ..database.database import get_db
-from ..database.models import Booking, User, InsurancePolicy, WifiCode, TransportProvider, Schedule
+from ..database.models import Booking, User, InsurancePolicy, WifiCode, TransportProvider, Schedule, BookingStatus, PaymentStatus
 from ..services.booking_service import BookingService
 from ..services.insurance_service import InsuranceService
 from ..services.wifi_service import WifiService
@@ -84,42 +84,33 @@ async def get_booking_trends(
     if not start_date:
         start_date = end_date - timedelta(days=30)
     
-    # Build query
-    query = select(Booking).where(
-        and_(
-            Booking.created_at >= start_date,
-            Booking.created_at <= end_date
+    # Aggregates via SQL
+    base = (
+        select(
+            func.count(Booking.id),
+            func.count().filter(Booking.booking_status == BookingStatus.CONFIRMED),
+            func.count().filter(Booking.booking_status == BookingStatus.CANCELLED),
+            func.coalesce(func.sum(Booking.total_amount).filter(Booking.payment_status == PaymentStatus.PAID), 0.0)
         )
+        .where(and_(Booking.created_at >= start_date, Booking.created_at <= end_date))
     )
-    
     if provider_id:
-        # Join with schedules to filter by provider
-        query = query.join(Schedule, Booking.schedule_id == Schedule.id)
-        query = query.where(Schedule.provider_id == provider_id)
-    
-    result = await session.execute(query)
-    bookings = result.scalars().all()
-    
-    # Calculate trends
-    total_bookings = len(bookings)
-    confirmed_bookings = len([b for b in bookings if b.booking_status.value == "confirmed"])
-    cancelled_bookings = len([b for b in bookings if b.booking_status.value == "cancelled"])
-    revenue = sum(b.total_amount for b in bookings if b.payment_status.value == "paid")
-    average_booking_value = revenue / total_bookings if total_bookings > 0 else 0
+        base = base.select_from(Booking).join(Schedule, Booking.schedule_id == Schedule.id).where(Schedule.provider_id == provider_id)
+    total_bookings, confirmed_bookings, cancelled_bookings, revenue = (await session.execute(base)).one()
+    average_booking_value = (revenue / total_bookings) if total_bookings else 0
     
     # Generate daily trends for the period
-    trends = []
-    current_date = start_date
-    while current_date <= end_date:
-        next_date = current_date + timedelta(days=1)
-        daily_bookings = [b for b in bookings if current_date <= b.created_at < next_date]
-        
-        trends.append({
-            "date": current_date.isoformat(),
-            "bookings": len(daily_bookings),
-            "revenue": sum(b.total_amount for b in daily_bookings if b.payment_status.value == "paid")
-        })
-        current_date = next_date
+    trends_rows = await session.execute(
+        select(
+            func.date_trunc('day', Booking.created_at).label('day'),
+            func.count(Booking.id).label('bookings'),
+            func.coalesce(func.sum(Booking.total_amount).filter(Booking.payment_status == PaymentStatus.PAID), 0.0).label('revenue'),
+        )
+        .where(and_(Booking.created_at >= start_date, Booking.created_at <= end_date))
+        .group_by('day')
+        .order_by('day')
+    )
+    trends = [{"date": row.day.isoformat(), "bookings": row.bookings, "revenue": float(row.revenue)} for row in trends_rows]
     
     return BookingTrendsResponse(
         period=f"{start_date.date()} to {end_date.date()}",
@@ -145,34 +136,32 @@ async def get_user_demographics(
         )
     
     # Total users
-    total_users_result = await session.execute(select(User))
-    total_users = len(total_users_result.scalars().all())
+    total_users = (await session.execute(select(func.count(User.id)))).scalar_one()
     
     # Active users (users with bookings in last 30 days)
     thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
-    active_users_result = await session.execute(
-        select(User).join(Booking, User.id == Booking.user_id)
-        .where(Booking.created_at >= thirty_days_ago)
-    )
-    active_users = len(set(user.id for user in active_users_result.scalars().all()))
+    active_users = (
+        await session.execute(
+            select(func.count(func.distinct(User.id)))
+            .join(Booking, User.id == Booking.user_id)
+            .where(Booking.created_at >= thirty_days_ago)
+        )
+    ).scalar_one()
     
     # New users (registered in last 30 days)
-    new_users_result = await session.execute(
-        select(User).where(User.created_at >= thirty_days_ago)
-    )
-    new_users = len(new_users_result.scalars().all())
+    new_users = (
+        await session.execute(select(func.count(User.id)).where(User.created_at >= thirty_days_ago))
+    ).scalar_one()
     
     # User growth rate
     previous_period_start = thirty_days_ago - timedelta(days=30)
-    previous_period_users_result = await session.execute(
-        select(User).where(
-            and_(
-                User.created_at >= previous_period_start,
-                User.created_at < thirty_days_ago
+    previous_period_users = (
+        await session.execute(
+            select(func.count(User.id)).where(
+                and_(User.created_at >= previous_period_start, User.created_at < thirty_days_ago)
             )
         )
-    )
-    previous_period_users = len(previous_period_users_result.scalars().all())
+    ).scalar_one()
     user_growth_rate = ((new_users - previous_period_users) / previous_period_users * 100) if previous_period_users > 0 else 0
     
     # Mock demographics data
@@ -277,46 +266,57 @@ async def get_revenue_analytics(
         start_date = end_date - timedelta(days=30)
     
     # Get paid bookings in date range
-    bookings_result = await session.execute(
-        select(Booking).where(
-            and_(
-                Booking.created_at >= start_date,
-                Booking.created_at <= end_date,
-                Booking.payment_status == "paid"
-            )
-        )
+    bookings_paid = await session.execute(
+        select(
+            func.coalesce(func.sum(Booking.total_amount), 0.0)
+        ).where(and_(
+            Booking.created_at >= start_date,
+            Booking.created_at <= end_date,
+            Booking.payment_status == "paid"
+        ))
     )
-    bookings = bookings_result.scalars().all()
-    
-    total_revenue = sum(b.total_amount for b in bookings)
+    total_revenue = float(bookings_paid.scalar_one())
     
     # Calculate revenue growth (compare with previous period)
     previous_start = start_date - (end_date - start_date)
-    previous_bookings_result = await session.execute(
-        select(Booking).where(
-            and_(
-                Booking.created_at >= previous_start,
-                Booking.created_at < start_date,
-                Booking.payment_status == "paid"
+    previous_revenue = float((
+        await session.execute(
+            select(func.coalesce(func.sum(Booking.total_amount), 0.0)).where(
+                and_(
+                    Booking.created_at >= previous_start,
+                    Booking.created_at < start_date,
+                    Booking.payment_status == "paid"
+                )
             )
         )
-    )
-    previous_revenue = sum(b.total_amount for b in previous_bookings_result.scalars().all())
+    ).scalar_one())
     revenue_growth = ((total_revenue - previous_revenue) / previous_revenue * 100) if previous_revenue > 0 else 0
     
-    # Revenue by provider
-    revenue_by_provider = []
-    providers_result = await session.execute(select(TransportProvider))
-    providers = providers_result.scalars().all()
-    
-    for provider in providers:
-        provider_bookings = [b for b in bookings if b.schedule.provider_id == provider.id]
-        provider_revenue = sum(b.total_amount for b in provider_bookings)
-        revenue_by_provider.append({
-            "provider_name": provider.name,
-            "revenue": provider_revenue,
-            "percentage": (provider_revenue / total_revenue * 100) if total_revenue > 0 else 0
-        })
+    # Revenue by provider (SQL aggregate)
+    provider_rows = await session.execute(
+        select(
+            TransportProvider.name,
+            func.coalesce(func.sum(Booking.total_amount), 0.0).label("revenue")
+        )
+        .select_from(Booking)
+        .join(Schedule, Booking.schedule_id == Schedule.id)
+        .join(TransportProvider, Schedule.provider_id == TransportProvider.id)
+        .where(and_(
+            Booking.created_at >= start_date,
+            Booking.created_at <= end_date,
+            Booking.payment_status == "paid"
+        ))
+        .group_by(TransportProvider.name)
+    )
+    provider_rows = provider_rows.all()
+    revenue_by_provider = [
+        {
+            "provider_name": name,
+            "revenue": float(revenue),
+            "percentage": (float(revenue) / total_revenue * 100) if total_revenue > 0 else 0
+        }
+        for name, revenue in provider_rows
+    ]
     
     # Mock revenue by route
     revenue_by_route = [

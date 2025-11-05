@@ -7,6 +7,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 
 from ..database.models import WifiCode, Booking, WifiUsageStatus
+from ..database.config import get_settings
+from sqlalchemy import func
+
+_settings = get_settings()
 
 
 class WifiService:
@@ -31,7 +35,8 @@ class WifiService:
         """Mock API call to generate WiFi code with provider."""
         # Simulate API delay
         import asyncio
-        await asyncio.sleep(0.2)
+        if _settings.DEBUG:
+            await asyncio.sleep(0.05)
         
         # Generate mock WiFi code
         wifi_code = WifiService.generate_wifi_code()
@@ -166,14 +171,22 @@ class WifiService:
         
         result = await session.execute(query)
         wifi_codes = result.scalars().all()
-        
-        wifi_list = []
-        for wifi_code in wifi_codes:
-            wifi_data = await WifiService.get_wifi_code_by_id(session, str(wifi_code.id))
-            if wifi_data:
-                wifi_list.append(wifi_data)
-        
-        return wifi_list
+
+        return [
+            {
+                "id": str(w.id),
+                "booking_id": str(w.booking_id),
+                "code": w.code,
+                "qr_code_data": w.qr_code_data,
+                "expiry_time": w.expiry_time.isoformat(),
+                "usage_status": w.usage_status.value,
+                "bandwidth_limit_mb": w.bandwidth_limit_mb,
+                "provider_code_id": w.provider_code_id,
+                "created_at": w.created_at.isoformat(),
+                "updated_at": w.updated_at.isoformat(),
+            }
+            for w in wifi_codes
+        ]
     
     @staticmethod
     async def get_active_wifi_codes(
@@ -198,14 +211,22 @@ class WifiService:
         
         result = await session.execute(query)
         wifi_codes = result.scalars().all()
-        
-        wifi_list = []
-        for wifi_code in wifi_codes:
-            wifi_data = await WifiService.get_wifi_code_by_id(session, str(wifi_code.id))
-            if wifi_data:
-                wifi_list.append(wifi_data)
-        
-        return wifi_list
+
+        return [
+            {
+                "id": str(w.id),
+                "booking_id": str(w.booking_id),
+                "code": w.code,
+                "qr_code_data": w.qr_code_data,
+                "expiry_time": w.expiry_time.isoformat(),
+                "usage_status": w.usage_status.value,
+                "bandwidth_limit_mb": w.bandwidth_limit_mb,
+                "provider_code_id": w.provider_code_id,
+                "created_at": w.created_at.isoformat(),
+                "updated_at": w.updated_at.isoformat(),
+            }
+            for w in wifi_codes
+        ]
     
     @staticmethod
     async def use_wifi_code(
@@ -273,48 +294,53 @@ class WifiService:
     async def get_wifi_statistics(session: AsyncSession) -> Dict[str, Any]:
         """Get WiFi usage statistics."""
         # Total WiFi codes
-        total_codes_result = await session.execute(select(WifiCode))
-        total_codes = len(total_codes_result.scalars().all())
-        
+        total_codes = (
+            await session.execute(select(func.count(WifiCode.id)))
+        ).scalar_one()
+
         # Active WiFi codes
-        active_codes_result = await session.execute(
-            select(WifiCode).where(
-                and_(
-                    WifiCode.usage_status == WifiUsageStatus.UNUSED,
-                    WifiCode.expiry_time > datetime.now(timezone.utc)
+        active_codes = (
+            await session.execute(
+                select(func.count(WifiCode.id)).where(
+                    and_(
+                        WifiCode.usage_status == WifiUsageStatus.UNUSED,
+                        WifiCode.expiry_time > datetime.now(timezone.utc)
+                    )
                 )
             )
-        )
-        active_codes = len(active_codes_result.scalars().all())
-        
+        ).scalar_one()
+
         # Used WiFi codes
-        used_codes_result = await session.execute(
-            select(WifiCode).where(WifiCode.usage_status == WifiUsageStatus.USED)
-        )
-        used_codes = len(used_codes_result.scalars().all())
-        
+        used_codes = (
+            await session.execute(
+                select(func.count(WifiCode.id)).where(WifiCode.usage_status == WifiUsageStatus.USED)
+            )
+        ).scalar_one()
+
         # Expired WiFi codes
-        expired_codes_result = await session.execute(
-            select(WifiCode).where(
-                and_(
-                    WifiCode.usage_status == WifiUsageStatus.UNUSED,
-                    WifiCode.expiry_time <= datetime.now(timezone.utc)
+        expired_codes = (
+            await session.execute(
+                select(func.count(WifiCode.id)).where(
+                    and_(
+                        WifiCode.usage_status == WifiUsageStatus.UNUSED,
+                        WifiCode.expiry_time <= datetime.now(timezone.utc)
+                    )
                 )
             )
-        )
-        expired_codes = len(expired_codes_result.scalars().all())
-        
+        ).scalar_one()
+
         # Today's generated codes
         today = datetime.now().date()
-        today_codes_result = await session.execute(
-            select(WifiCode).where(
-                and_(
-                    WifiCode.created_at >= today,
-                    WifiCode.created_at < today + timedelta(days=1)
+        today_codes = (
+            await session.execute(
+                select(func.count(WifiCode.id)).where(
+                    and_(
+                        WifiCode.created_at >= today,
+                        WifiCode.created_at < today + timedelta(days=1)
+                    )
                 )
             )
-        )
-        today_codes = len(today_codes_result.scalars().all())
+        ).scalar_one()
         
         return {
             "total_codes": total_codes,

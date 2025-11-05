@@ -30,6 +30,8 @@ engine = create_async_engine(
     echo=get_settings().SQL_ECHO,
     pool_pre_ping=True,
     pool_recycle=300,
+    pool_size=10,
+    max_overflow=20,
     connect_args={"ssl": "require"},
 )
 

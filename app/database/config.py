@@ -44,6 +44,9 @@ class Settings(BaseSettings):
     # Transport provider settings
     ENABLED_PROVIDERS: str = "abc_transport,guo_transport,pmt"
     
+    # Cache settings
+    REDIS_URL: Optional[str] = "redis://localhost:6379/0"
+    
     class Config:
         env_file = ".env.local"
         case_sensitive = True
@@ -73,3 +76,5 @@ class Settings(BaseSettings):
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     return Settings()
+
+settings = get_settings()

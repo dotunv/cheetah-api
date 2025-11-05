@@ -315,7 +315,8 @@ Cheetah Transport Team
         """Send email via SMTP."""
         # This would implement actual SMTP email sending
         # For now, just simulate the process
-        await asyncio.sleep(0.1)
+        if settings.DEBUG:
+            await asyncio.sleep(0.05)
         print(f"SMTP Email sent to {recipient}")
     
     @staticmethod
@@ -326,7 +327,8 @@ Cheetah Transport Team
         html_body: Optional[str] = None
     ):
         """Mock email sending for development."""
-        await asyncio.sleep(0.1)
+        if settings.DEBUG:
+            await asyncio.sleep(0.05)
         print(f"Mock Email sent to {recipient}")
         print(f"Subject: {subject}")
         print(f"Body: {body[:100]}...")
@@ -339,7 +341,8 @@ Cheetah Transport Team
         """Send SMS via configured provider."""
         # This would implement actual SMS sending
         # For now, just simulate the process
-        await asyncio.sleep(0.1)
+        if settings.DEBUG:
+            await asyncio.sleep(0.05)
         print(f"SMS sent to {recipient} via provider")
     
     @staticmethod
@@ -348,6 +351,7 @@ Cheetah Transport Team
         message: str
     ):
         """Mock SMS sending for development."""
-        await asyncio.sleep(0.1)
+        if settings.DEBUG:
+            await asyncio.sleep(0.05)
         print(f"Mock SMS sent to {recipient}")
         print(f"Message: {message[:50]}...") 
